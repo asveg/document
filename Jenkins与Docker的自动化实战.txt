@@ -1,0 +1,283 @@
+Jenkins与Docker的自动化CI/CD实战
+
+在互联网时代，对于每一家公司，软件开发和发布的重要性不言而喻，目前已经形成一套标准的流程，最重要的组成部分就是持续集成（CI）及持续部署、交付（CD）。本文基于Jenkins+Docker+Git实现一套CI自动化发布流程。
+一、发布流程设计
+
+工作流程：
+	1. 开发人员提交代码到Git版本仓库；
+	2. Jenkins人工/定时触发项目构建；
+	3. Jenkins拉取代码、代码编码、打包镜像、推送到镜像仓库；
+	4. Jenkins在Docker主机创建容器并发布。
+
+环境规划如下：
+Jenkins/Docker	192.168.0.217
+Docker	        192.168.0.218
+Git/Registry	192.168.0.219
+
+操作系统：CentOS7.4
+二、部署Git仓库
+# yum install git -y
+2. 创建Git用户并设置密码
+# useradd git
+# passwd git
+3. 创建仓库
+# su - git
+# mkdir solo.git
+# cd solo.git
+# git --bare init
+4. 访问创建的这个仓库
+# git clone git@192.168.0.212:/home/git/solo.git
+
+3.2 验证git服务
+注意：这个步骤在jenkins服务器上操作
+
+正常来说，开发用自己的电脑把写好的代码push到git仓库就算完成验证，在本文中去github里下载一个java项目（tale）来验证，我们就用jenkins这台服务器做为git客户端：
+1、下载git客户端
+[root@jenkins ~]# yum -y install git
+2、下载tale项目包
+#先创建个目录来存放tale包，随便放在哪个空目录下都行，后面我们还需要把它移走
+[root@jenkins ~]# mkdir /tale
+[root@jenkins ~]# git  clone  https://github.com/otale/tale.git
+#在查看下载好的tale项目
+[root@jenkins tale]# ls
+bin  LICENSE  package.xml  pom.xml  README.md  README_ZH.md  src
+3、生成公钥，拷贝到git服务器
+
+[root@jenkins tale]# ssh-keygen  -t rsa
+Generating public/private rsa key pair.
+Enter file in which to save the key (/root/.ssh/id_rsa): 
+Enter passphrase (empty for no passphrase): 
+Enter same passphrase again: 
+Your identification has been saved in /root/.ssh/id_rsa.
+Your public key has been saved in /root/.ssh/id_rsa.pub.
+The key fingerprint is:
+SHA256:S6qxaVNuJ5inLxGDdrqqlpNsG4AsmcXH88dXckHdIOI root@jenkins
+The key's randomart image is:
++---[RSA 2048]----+
+|          ..+..o |
+| . .     . . o. .|
+|  o.+     E o    |
+|o+o.+o .   +     |
+|*o o o. S .      |
+|o . . .+ o       |
+|..o..*. .        |
+| Bo *== .        |
+|*oo.=B.o         |
++----[SHA256]-----+
+
+#把公钥拷贝到git服务器，注意用刚才的git用户
+[root@jenkins tale]# ssh-copy-id  git@172.18.18.34
+/usr/bin/ssh-copy-id: INFO: Source of key(s) to be installed: "/root/.ssh/id_rsa.pub"
+/usr/bin/ssh-copy-id: INFO: attempting to log in with the new key(s), to filter out any that are already installed
+/usr/bin/ssh-copy-id: INFO: 1 key(s) remain to be installed -- if you are prompted now it is to install the new keys
+git@172.18.18.34's password: 
+
+Number of key(s) added: 1
+
+Now try logging into the machine, with:   "ssh 'git@172.18.18.34'"
+and check to make sure that only the key(s) you wanted were added.
+4、用git clone验证
+
+#先创建个目录，目录名随便定义，用于拉取git服务器上创建的app.git仓库
+[root@jenkins tale]# mkdir /git
+[root@jenkins tale]# cd /git/
+
+#配置下git客户端的用户信息
+[root@jenkins git]# git config --global  user.email "test@qq.com"
+[root@jenkins git]# git config --global user.name "test"
+
+#在来git clone，由于app.git仓库是空的，所以会很快
+[root@jenkins git]# git clone  git@172.18.18.34:/home/git/app.git
+Cloning into 'app'...
+warning: You appear to have cloned an empty repository.
+5、把之前下载的tale项目push到app.git仓库中
+
+#先移动至刚才/git目录下
+[root@jenkins git]# mv /tale/* /git/app/
+[root@jenkins git]# cd /git/app/
+[root@jenkins app]# ls
+bin  LICENSE  package.xml  pom.xml  README.md  README_ZH.md  src
+
+#然后提交到git仓库
+[root@jenkins app]# git add .
+[root@jenkins app]# git commit  -m "add project tale"
+[root@jenkins app]# git push  origin master
+Counting objects: 297, done.
+Delta compression using up to 4 threads.
+Compressing objects: 100% (255/255), done.
+Writing objects: 100% (297/297), 6.35 MiB | 0 bytes/s, done.
+Total 297 (delta 22), reused 0 (delta 0)
+To git@172.18.18.34:/home/git/app.git
+ * [new branch]      master -> master
+
+
+三、准备Jenkins环境
+Jenkins是一个开源软件项目，是基于Java开发的一种持续集成工具，用于代码编译、部署、测试等工作。 Jenkins也是一个跨平台的，大多数主流的平台都支持，而且安装很简单，我们这里以部署war包方式安装它。 
+官网下载地址：https://jenkins.io/download/ 
+如图点击下载最后一个Generic Java package(war)：
+	
+在安装前需要具备Java环境，安装方式如下：
+# tar zxf jdk-8u45-linux-x64.tar.gz 
+# mv jdk-8u45-linux-x64 /usr/local/jdk1.8 
+# vi /etc/profile 
+JAVA_HOME=/usr/local/jdk1.8 
+PATH=$PATH:$JAVA_HOME/bin
+CLASSPATH=.:$JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar 
+export JAVA_HOME PATH CLASSPATH
+# source /etc/profile
+在192.168.0.217主机安装Jenkins，下载Tomcat二进制包将war包到webapps下即可：**
+# wget http://mirrors.jenkins.io/war-stable/latest/jenkins.war 
+# wget http://mirrors.shu.edu.cn/apache/tomcat/tomcat-8/v8.5.32/bin/apache-tomcat-8.5.32.tar.gz 
+# tar zxf apache-tomcat-8.5.32.tar.gz 
+# mv apache-tomcat-8.5.32 /usr/local/tomcat-jenkins 
+# rm /usr/local/tomcat-jenkins/webapps/* -rf 
+# unzip jenkins.war -d /usr/local/tomcat-jenkins/webapps/ROOT 
+# cd /usr/local/tomcat-jenkins/bin/ 
+# ./startup.sh 
+# tail ../logs/catalina.out -f 
+... 
+Jenkins initial setup is required. An admin user has been created and a password generated. 
+Please use the following password to proceed to installation: 
+a5f1f7c167fd4b8ab62f9497d32d97db 
+This may also be found at: /root/.jenkins/secrets/initialAdminPassword ...
+部署成功，访问Jenkins：http://ip:8080
+第一步：输入上面日志输出的密码：a5f1f7c167fd4b8ab62f9497d32d97db，或者从本机/root/.jenkins/secrets/initialAdminPassword文件获取，点击继续
+第二步：点击“选择插件来安装”
+第三步：保持默认，点击继续
+第四步：创建管理员用户，保存并完成
+第五步：设置Jenkins访问地址，保持默认，点击保存完成
+安装完成，开始使用Jenkins：
+
+四、部署私有镜像仓库
+Docker Hub作为Docker默认官方公共镜像；如果想自己搭建私有镜像仓库，官方也提供registry镜像，使得搭建私有仓库非常简单。
+
+在192.168.0.219部署：
+# docker run -d -v /opt/registry:/var/lib/registry -p 5000:5000 --restart=always --name registry registry
+接下来测试registry可用性。
+由于Docker CLI默认以HTTPS访问，而部署的registry并未提供HTTPS，因此，需要在pull镜像的Docker主机（192.168.0.217，192.168.0.218）添加HTTP可信任：
+ # vi /etc/docker/daemon.json 
+{"insecure-registries":["192.168.0.219:5000"]}
+# service docker restart
+
+
+五、安装Docker
+在192.168.0.217/192.168.0.218/192.168.0.219主机安装Docker，如下：
+1. 安装依赖包
+# yum install -y yum-utils device-mapper-persistent-data lvm2
+2. 添加Docker软件包源：
+# yum-config-manager \
+--add-repo \
+https://download.docker.com/linux/centos/docker-ce.repo
+3. 安装Docker CE
+# yum install docker-ce -y
+4. 配置加速器
+# curl -sSL https://get.daocloud.io/daotools/set_mirror.sh | sh -s http://bc437cce.m.daocloud.io
+5. 启动并开机启动
+# systemctl start docker
+# systemctl enable docker
+
+六、构建Tomcat基础镜像
+JAVA程序必须有JDK环境才可以运行，为了减少镜像大小及提高性能，这里直接把JDK放到宿主机上，容器以挂载形式使用。
+在192.168.0.217/192.168.0.218安装JDK：
+# tar zxvf jdk-8u45-linux-x64.tar.gz 
+# mv jdk-8u45-linux-x64 /usr/local/jdk1.8
+Tomcat基础镜像Dockerfile：
+# cat Dockerfile
+FROM centos:7
+MAINTAINER www.aliangedu.com
+ENV VERSION=8.5.32
+ENV JAVA_HOME /usr/local/jdk
+RUN yum install wget -y
+RUN wget http://mirrors.shu.edu.cn/apache/tomcat/tomcat-8/v${VERSION}/bin/apache-tomcat-${VERSION}.tar.gz && \
+    tar zxf apache-tomcat-${VERSION}.tar.gz && \
+    mv apache-tomcat-${VERSION} /usr/local/tomcat && \
+    rm -rf apache-tomcat-${VERSION}.tar.gz /usr/local/tomcat/webapps/* && \
+    mkdir /usr/local/tomcat/webapps/ROOT
+EXPOSE 8080
+CMD ["catalina.sh", "run"]
+构建镜像并上传到registry：
+# docker build -t 192.168.0.219:5000/tomcat-85 -f Dockerfile .
+# docker push 192.168.0.219:5000/tomcat-85
+
+七、Jenkins配置全局工具配置
+主页面 -> 系统管理 -> 全局工具配置
+指定JDK、Maven路径，Git保持默认：
+
+如果Jenkins主机没有git命令，需要安装Git：
+# yum install git -y
+
+八、Jenkins安装必要插件
+1. Jenkins安装必要插件
+主页面 -> 系统管理 ->管理插件：
+
+安装SSH与Git Parameter插件。
+插件说明：
+	• SSH：用于SSH远程Docker主机执行Shell命令
+	• Git Parameter：动态获取Git仓库Branch、Tag
+2. 配置SSH插件
+第一步：先创建一个用于连接Docker主机的凭据。
+主页面 -> 凭据 -> 系统 -> 右击全局凭据 -> 添加凭据：
+
+输入连接Docker主机的用户名和密码：
+
+第二步：添加SSH远程主机
+主页面 -> 系统管理 -> 系统设置 -> SSH remote hosts：
+
+九、上传JAVA项目代码到Git仓库
+从Github拉取开源JAVA博客系统solo：
+# git clone https://github.com/b3log/solo
+# cd solo
+移除旧的推送地址，添加新的：
+# git remote remove origin 
+# git remote add origin git@192.168.0.219:/home/git/solo.git
+提交代码到Git仓库并创建tag：
+# touch src/main/webapp/a.html
+# git add .
+# git commit -m “a”
+创建标签：
+# git tag 1.0.0
+推送到Git服务器：
+# git push origin 1.0.0 
+十、Jenkins创建项目并发布测试
+主页面 -> 新建任务 -> 输入任务名称，构建一个Maven项目：
+
+注意：如果没有显示“构建一个Maven项目”选项，需要在管理插件里安装“Maven Integration plugin”插件。
+配置Git参数化构建：
+
+动态获取Git仓库tag，与用户交互选择Tag发布：
+
+指定项目Git仓库地址：
+
+修改*/master为$Tag，Tag是上面动态获取的变量名，表示根据用户选择打代码版本。
+设置maven构建命令选项：
+
+利用pom.xml文件构建项目。
+在Jenkins本机镜像构建与推送到镜像仓库，并SSH远程连接到Docker主机使用推送的镜像创建容器：
+
+上图中，在Jenkins主机执行的Shell命令如下：
+REPOSITORY=192.168.0.219:5000/solo:${Tag}
+# 构建镜像
+cat > Dockerfile << EOF
+FROM 192.168.0.219:5000/tomcat-85:latest
+RUN rm -rf /usr/local/tomcat/webapps/ROOT
+COPY target/*.war /usr/local/tomcat/webapps/ROOT.war
+CMD ["catalina.sh", "run"]
+EOF
+docker build -t $REPOSITORY .
+# 上传镜像
+docker push $REPOSITORY
+上图中，SSH远程Docker主机执行的Shell命令如下：
+REPOSITORY=192.168.0.219:5000/solo:${Tag}
+# 部署
+docker rm -f blog-solo |true
+docker image rm $REPOSITORY |true
+docker container run -d --name blog-solo -v /usr/local/jdk1.8:/usr/local/jdk -p 88:8080 $REPOSITORY
+注：容器名称blog-solo，暴露宿主机端口88，即使用宿主机IP:88访问blog-solo项目。
+blog-solo项目已配置完成，开始构建：
+选择tag，开始构建：
+
+点击左下角构建历史里，右击第一个查看控制台输出：
+
+
+浏览器访问solo项目：http://192.168.0.218:88
+
