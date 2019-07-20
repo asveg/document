@@ -1,0 +1,136 @@
+
+git 详解及实用指南之二 （远程操作）
+
+先确保本机已经安装上Git，其次确认可以正常访问Gitlab服务器
+　环境：
+　　Git：CentOS 7.5  192.168.170.22
+　　Gitlab： CentOS 7.5 192.168.170.227
+
+1.生成 SSH key
+
+这里是用gitlab来做演示，登陆到Gitlab服务器地址，新建仓库
+
+1）生成一个 ssh key ,在 windows 平台上可以直接使用 'git bash' 工具来创建
+2）生成一个 RSA 编码的 KEY
+
+ssh-keygen -t rsa -C “你自己的邮箱”
+[root@node6 ~]# ssh-keygen -t rsa -C "wang_jinhuai@163.com"
+Generating public/private rsa key pair.
+Enter file in which to save the key (/root/.ssh/id_rsa): 
+/root/.ssh/id_rsa already exists.
+Overwrite (y/n)? y
+Enter passphrase (empty for no passphrase): 
+Enter same passphrase again: 
+Your identification has been saved in /root/.ssh/id_rsa.
+Your public key has been saved in /root/.ssh/id_rsa.pub.
+The key fingerprint is:
+SHA256:fadj+PLsv/2FHEoX5QeqaDua+ZZMoJnEtTigMCnAPa0 wang_jinhuai@163.com
+The key's randomart image is:
++---[RSA 2048]----+
+|+.. .         . .|
+|=..o ..      . + |
+|oo ooo .    . . o|
+|.  E= o  o .   ..|
+|   . = .S o o +  |
+|    +  ... + * o |
+|       oo.. = o .|
+|       ++..+ . ..|
+|      +o.  +=.o.+|
++----[SHA256]-----+
+
+3）查看key文件
+[root@node6 ~]# cat /root/.ssh/id_rsa.pub 
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC42FV2nowAMQS3J2UToR/psZTlh+OCkkgtU1kbv6x9NnO/B1J7IUAJoTjKLtQScxJ6Q4cCKXwTKqvWqPujso1O0a7lj++UEr15VItCX61k6sv5ZhWFdrz8LeOGu5O7y5b5Ijr7Bu5N+GudSp942wJqGh1ys5Thq6+DY53cQAEbzObZ5A3KneKNR/Yi5nS7HEsqartw9W4dVRB7WEuf119UddWNJOJOeqehQ666jHpGz2RQ7KjGGaych4h5rETB6EUizxm14fnxh9dwyexXCFn80lPvfIuTl07Yr7pBcLDyCklmW0MjHlQGoRxUn4D8/vR5mQCFEe5w/9N5eY7jZDcB wang_jinhuai@163.com
+
+4) 将key添加到gitlab上
+   在设置选项-->SSH Keys中添加key
+
+5) 添加完测试是否正确
+[root@node6 ~]# ssh -T git@192.168.170.227
+Welcome to GitLab, @root!
+
+那么此时就表示已经让客户端和githlab之间建立好了一个安全的链接，由于ssh的存在，gitlab 才可以进行用户的识别，以保证操作是最安全的。
+
+2.添加远程仓库
+
+只有存在仓库，才可以表示用户可以进行开发。但是在mypro 目录下已经存在了一个本地仓库，所以下面希望可以将本地仓库发布到服务器上。
+
+1）在 GITHUB 上创建新的仓库
+
+现在设置的仓库名称为“test”，随后选择创建仓库。而仓库创建完成之后会给出两种连接方式:
+
+SSH 链接地址: git@192.168.170.227:root/test.git
+HTTP 链接地址: http://192.168.170.227/root/test.git
+
+本地仓库必须使用以上的地址才可以发布到服务器上。
+
+2）把Gitlab与本地仓库相关联
+
+我们尝试把仓库克隆到本地仓库：
+
+第一种方式：通过ssh方式克隆，该方式需要将git客户端的ssh key文件添加到gitlab当中，每次克隆都不会输入密码。
+[root@localhost /]# git clone git@192.168.170.227:root/test.git
+Cloning into 'test'...
+remote: Enumerating objects: 12, done.
+remote: Counting objects: 100% (12/12), done.
+remote: Compressing objects: 100% (8/8), done.
+remote: Total 12 (delta 2), reused 0 (delta 0)
+Receiving objects: 100% (12/12), done.
+Resolving deltas: 100% (2/2), done.
+
+第二种方式：通过http方式克隆，该方式每次克隆都会输入用户名和密码，
+[root@localhost /]# git clone git@192.168.170.227:root/test.git  #192.168.170.227是指Gitlab服务器地址，可以修改成域名
+　　Cloning into 'test'...
+　　Username for 'http://192.168.170.227': root    #Gitlab  账号
+　　Password for 'http://root@192.168.170.227':    #Gitlab  密码
+　　warning: You appear to have cloned an empty repository.
+
+注：看自己的个人习惯选择其中一种方式使用即可，后边的操作步骤都一样。
+
+将该Gitlab版本仓库添加到本机的远程列表中：
+[root@localhost /]# git remote add test git@192.168.170.22:root/test.git
+[root@localhost /]# git remote
+origin
+
+编写一个新文件：
+[root@localhost /]# cd test/
+[root@localhost test]# echo "This is Test txt - test" > test
+
+将该文件提交到本地的Git版本仓库：
+[root@localhost test]# git add test 
+[root@localhost test]# git commit -m "add test"
+[master (root-commit) 743413d] add test
+ 1 file changed, 1 insertion(+)
+ create mode 100644 test
+
+然后将本地的Git仓库同步到远程Git服务器上(第一次请加上参数-u，代表关联本地与远程)：
+[root@localhost test]# git push -u origin master
+Username for 'http://192.168.170.227': root    #Gitlab 账号
+Password for 'http://root@192.168.170.227':    #Gitlab 密码
+Counting objects: 3, done.
+Writing objects: 100% (3/3), 238 bytes | 0 bytes/s, done.
+Total 3 (delta 0), reused 0 (delta 0)
+To http://192.168.170.22/root/test.git    #上传的仓库
+ * [new branch]      master -> master
+Branch master set up to track remote branch master from origin.
+
+查看下Web端：（上传文件前）和（上传文件后）刷新下web页面新增了test文件
+
+解释：
+关联远程仓库：git remote add origin git@git.*.jp:gitlab/test.git
+查看远程服务器端存在的仓库信息：git remote -v
+删除掉不需要的仓库：git remote rm '仓库名字'
+提交修改操作到服务器：git commit -a -m "远程测试 git "
+本地代码同步到服务器端：git push -u origin master
+
+3.克隆仓库
+
+正确的做法应该先有远程仓库，而后根据此远程仓库克隆出一个新的仓库来。
+1）在 Gitlab上初始化一个新的仓库：myjob，此处选中了“Initialize this repository with a README”表示自动为用户进行仓库的初始化，并且会自动存在有一个“README”的文件存在。仓库创建完成之后下面来观察一下此时仓库的内容。
+
+2）在本地磁盘上进行仓库的克隆操作
+git clone http:/192.168.170.227/root/myjob.git
+建议在根目录克隆，在实际开发之中最好所有的开发者直接克隆远程仓库进行操作。
+
+
+
