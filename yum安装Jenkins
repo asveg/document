@@ -1,0 +1,38 @@
+centos下搭建Jenkins持续集成环境(安装jenkins)
+1、安装JDK
+yum install -y java
+
+这里需要注意java和jenkins版本对应关系：
+2.164 (2019-02) and newer: Java 8 or Java 11
+2.54 (2017-04) and newer: Java 8
+1.612 (2015-05) and newer: Java 7
+
+2、安装jenkins
+
+添加Jenkins库到yum库，Jenkins将从这里下载安装。
+wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenkins.repo
+rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io.key
+
+yum install -y jenkins
+
+如果不能安装就到官网下载jenkis的rmp包，官网地址（http://pkg.jenkins-ci.org/redhat-stable/）
+wget http://pkg.jenkins-ci.org/redhat-stable/jenkins-2.73.3-1.1.noarch.rpm
+rpm -ivh jenkins-2.73.3-1.1.noarch.rpm
+
+配置jenkis的端口
+vi /etc/sysconfig/jenkins
+找到修改端口号：
+JENKINS_PORT="8080"  此端口不冲突可以不修改 
+
+3、启动jenkins
+systemctl start/stop/restart jenkins 
+
+安装成功后Jenkins将作为一个守护进程随系统启动
+系统会创建一个“jenkins”用户来允许这个服务，如果改变服务所有者，同时需要修改/var/log/jenkins, /var/lib/jenkins, 和/var/cache/jenkins的所有者
+启动的时候将从/etc/sysconfig/jenkins获取配置参数
+默认情况下，Jenkins运行在8080端口，在浏览器中直接访问该端进行服务配置
+Jenkins的RPM仓库配置被加到/etc/yum.repos.d/jenkins.repo
+
+4、打开jenkins 
+在浏览器中访问http://ip:8080，首次进入会要求输入初始密码， 
+初始密码在：/var/lib/jenkins/secrets/initialAdminPassword 
