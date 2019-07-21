@@ -4,9 +4,9 @@ git 详解及实用指南之一 （本地操作）
 在任何一个系统之中都会存在有多个开发者(多人协作开发)，而在 GIT 之中，对于每一个开发者(电脑)，都需要 开发者自己定义自己的名字与 email 地址，以便进行方便的联系，此时需要配置全局信息。
 
 配置全局用户名及 email 地址
-
 git config --global user.name 'wangjinhuai'
 git config --global user.email 'wang_jinghuai@163.com'
+
 设置完成之后如果成功不会任何提示信息，可以通过如下命令查看全局配置信息：
 [root@node7 myrpo]# git config -l
 user.name=wangjinhuai
@@ -33,9 +33,7 @@ core.logallrefupdates=true
 
 此时 mypro 文件夹是一个空的文件夹，没有任何的内容，只是一个纯粹的目录。
 
-将 mypro 文件夹定义为仓库, 进入文件夹, 初始化仓库(将此目录变为可以被GIT管理的仓库)
-
-而且此时会提示，在 mypro 文件夹之中创建了一个“.git”的目录，这个目录就是仓库信息，死都不能改。
+将 mypro 文件夹定义为仓库, 进入文件夹, 初始化仓库(将此目录变为可以被GIT管理的仓库)而且此时会提示，在mypro文件夹之中创建了一个“.git”的目录，这个目录就是仓库信息，不能修改。
 
 3.添加文件
 
