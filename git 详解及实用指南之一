@@ -166,7 +166,7 @@ index 110facc..e7f3e86 100644
 [master 3cc3d7e] Update hello.js file. Add one lines
  1 file changed, 1 insertion(+)
 
-察看修改日志
+查看修改日志
 [root@node7 myrpo]# git log Hello.js 
 commit 3cc3d7e84195333a06acfe2a021fb5ad3746ab8b
 Author: wangjinhuai <wang_jinghuai@163.com>
@@ -186,23 +186,19 @@ Date:   Sat Jul 20 04:54:41 2019 -0400
 工作区： 就是当前电脑的操作目录(包含 .git);
 仓库：工作区有一个隐藏目录 .git,这个不算工作区，而是 git 的仓库,git 版本库里保存了很多东西，其中最重要的就是称为 stage 的暂存区，还有 git 为用户自动创建的主程序分支 master ，以及指向 master 的 head 指针。
 
-clipboard.png
-
 概念解释:
-
 在之前所编写的“hello.js”文件保存在用户工作区之中;
 当使用 add 命令之后，实际上就是将所有的文件提交到暂存区（state） 之中；
 使用 commit 命令之后，才表示真正的发出了修改，而真正可以运行的程序都保存在 master 分支上;
+
 6. 工作区上的操作
-clipboard.png
 
-修改 Hello.js
-
+修改 Hello.js文件
 btn.onclick = function() {
    console.log('第二次修改·！');
 }
-增加一个 demo.js 文件
 
+增加一个 demo.js 文件
 btn2.onclick = function() {
   console.log('demo click');
 }
@@ -225,14 +221,13 @@ no changes added to commit (use "git add" and/or "git commit -a")
 
 现在会提示有以下信息:
 
-修改了 Hello.js 文件，而这个文件给出了处理方式;
-出现了一个未标记的文件(Demo.js)，询问用户是否将其加入到暂存区之中。
+修改了 Hello.js 文件，而这个文件给出了处理方式; 出现了一个未标记的文件(Demo.js)，询问用户是否将其加入到暂存区之中。
+
 7. 缓存区上的操作
-clipboard.png
 
 使用“git add”将代码添加到暂存区之中
-
 git add .
+
 本次操作使用了一个“.”，那么就表示全部加入。修改之后再次观察状态。
 
 观察状态
@@ -246,11 +241,9 @@ git add .
 #
 8. 提交修改
 数据保存在暂存区之后，下面就要进行代码的提交，将代码提交到主分支上。
-
 当把暂存区的代码提交到主分支上之后，会自动的清空暂存区之中的内容。
 
 提交修改代码
-
 [root@node7 myrpo]# git commit -m 'add demo.js file'
 [master e765bb5] add demo.js file
  2 files changed, 4 insertions(+), 1 deletion(-)
@@ -291,7 +284,6 @@ e765bb5 HEAD@{1}: commit: add demo.js file
 89946ed HEAD@{3}: commit (initial): New Js file - Hello.js Create
 
 恢复最后一次提交
-
 [root@node7 myrpo]#  git reset --hard e765bb5
 HEAD is now at e765bb5 add demo.js file
  
@@ -370,8 +362,7 @@ btn.onclick = function() {
    console.log('我的王大冶');
 }
 
-就是要改代码，不干走人了，老子不吃你这套
-但是只要是文件一修改，那么 git 就可以立即跟踪到状态。
+就是要改代码，但是只要是文件一修改，那么 git 就可以立即跟踪到状态。
 [root@node7 myrpo]# git status
 # On branch master
 # Changes not staged for commit:
@@ -385,7 +376,6 @@ no changes added to commit (use "git add" and/or "git commit -a")
 但是后来发现，此种修改实在是不应该进行，如果进行了，只能有一个结论:此人脑袋有问题。但是写代码的时候 可能不知道上一次修改状态。
 
 恢复
-
 git checkout -- hello.js
 
 执行之后发现 Hello.java 文件就恢复到了一个原始的状态(上一次的提交状态)。
@@ -411,11 +401,9 @@ nothing to commit, working directory clean
 在状态查询的时候已经给出了用户的提示，即:你可以根据 HEAD 指针来恢复文件。
 
 从暂存区之中退出
-
 git reset HEAD hello.js 
-于是再次查询状态
 
-clipboard.png
+于是再次查询状态
 
 相当于现在已经由暂存区中保存的内容恢复到了工作区，那么既然在工作区了，就可以直接恢复原始状态。
 
@@ -423,8 +411,8 @@ clipboard.png
 
 git checkout -- hello.js 
 
-
 个人建议:养成良好的开发习惯，别像演示那样这么对待代码。
+
 12. 删除文件
 现在在仓库之中存在有 Demo.js 文件，但是假设这个文件从此之后不再使用了呢?只有一个解决方案:删除。但是 在 GIT 里面对于删除文件这一功能严格来讲也属于一个修改操作。
 
@@ -445,11 +433,10 @@ no changes added to commit (use "git add" and/or "git commit -a")
 这个时候文件是从当前工作区的磁盘中删除了，同时也提示文件被删除。
 
 提交更新
-
 git commit -a -m "Delete Demo.java File"
-但是如果说发现文件被删除错误了呢?则应该进行恢复。
+
+如果说发现文件被删除错误了呢?则应该进行恢复。
 
 恢复文件
-
 git reset --hard bc8e842247b3d78  
 如果文件被删除，则只能够利用版本控制的方式进行恢复。
