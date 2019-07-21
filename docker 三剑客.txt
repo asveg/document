@@ -1,0 +1,1103 @@
+Docker三剑客：Compose、Machine和Swarm
+
+Docker三大编排工具：
+
+    Docker Compose：是用来组装多容器应用的工具，可以在 Swarm集群中部署分布式应用。
+    Docker Machine：是支持多平台安装Docker的工具，使用 Docker Machine，可以很方便地在笔记本、云平台及数据中心里安装Docker。
+    Docker Swarm：是Docker社区原生提供的容器集群管理工具。
+
+Docker Compose
+
+    Github地址： https:#github.com/docker/compose
+
+    Compose是用来定义和运行一个或多个容器应用的工具。使用compaose可以简化容器镜像的建立及容器的运行。
+    Compose使用python语言开发，非常适合在单机环境里部署一个或多个容器，并自动把多个容器互相关联起来。
+
+    Compose 中有两个重要的概念：
+        服务 (service)：一个应用的容器，实际上可以包括若干运行相同镜像的容器实例。
+        项目 (project)：由一组关联的应用容器组成的一个完整业务单元，在 docker-compose.yml 文件中定义。
+
+    Compose是使用YML文件来定义多容器应用的，它还会用 docker-compose up 命令把完整的应用运行起来。docker-compose up 命令为应用的运行做了所有的准备工作。从本质上讲，Compose把YML文件解析成docker命令的参数，然后调用相应的docker命令行接口，从而把应用以容器化的方式管理起来。它通过解析容器间的依赖关系来顺序启动容器。而容器间的依赖关系则可以通过在 docker-compose.yml文件中使用 links 标记指定。
+
+    安装Docker compose:
+
+        方法一：
+
+        #下载
+        sudo curl -L https://github.com/docker/compose/releases/download/1.20.0/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
+        #安装
+        chmod +x /usr/local/bin/docker-compose
+        #查看版本
+        docker-compose version
+
+        方法二：
+
+        #安装pip
+        yum -y install epel-release
+        yum -y install python-pip
+        #确认版本
+        pip --version
+        #更新pip
+        pip install --upgrade pip
+        #安装docker-compose
+        pip install docker-compose 
+        #查看版本
+        docker-compose version
+
+        推荐使用方法一进行安装，安装成功后输入docker-compose version会返回 docker-compose 的版本信息，如下：
+
+        [root@localhost ~]# docker-compose version
+        docker-compose version 1.19.0, build 9e633ef
+        docker-py version: 2.7.0
+        CPython version: 2.7.13
+        OpenSSL version: OpenSSL 1.0.1t  3 May 2016
+
+        出现以上信息，表明 docker-compose 安装成功
+
+        安装补全工具(可选)
+
+        为了方便我们输入命令，也可以安装 Docker 的补全提示工具帮忙我们快速输入命令
+
+        #安装
+        yum install bash-completion
+
+        #下载docker-compose脚本
+        curl -L https://raw.githubusercontent.com/docker/compose/$(docker-compose version --short)/contrib/completion/bash/docker-compose > /etc/bash_completion.d/docker-compose
+
+
+        docker compose简单示例
+
+        我们设计一个场景，使用Python启动一个Web服务，输出一个hello()方法，每次访问的时候在Redis缓存中进行计数，并且将统计的结果打印到页面中。
+        第一步，创建 Python 服务
+
+        创建项目路径:
+        [root@localhost ~]# mkdir composetest
+        [root@localhost ~]# cd composetest
+
+        在目录下创建app.py文件
+        [root@localhost composetest]# vi app.py
+        import time
+
+        import redis
+        from flask import Flask
+
+        app = Flask(__name__)
+        cache = redis.Redis(host='redis', port=6379)
+
+        def get_hit_count():
+            retries = 5
+            while True:
+                try:
+                    return cache.incr('hits')
+                except redis.exceptions.ConnectionError as exc:
+                    if retries == 0:
+                        raise exc
+                    retries -= 1
+                    time.sleep(0.5)
+
+        @app.route('/')
+        def hello():
+            count = get_hit_count()
+            return 'Hello World! I have been seen {} times.\n'.format(count)
+
+        if __name__ == "__main__":
+            app.run(host="0.0.0.0", debug=True)
+
+        在这例子中, redis使用了容器内的网络默认端口是6379。这段Python程序的内容就是，启动后连接Redis并且输出 hello()方法，当每次访问的时候累计访问次数并且将结果放回到页面。
+
+        在同目录下创建requirements.txt文件，添加项目依赖的python包：
+        [root@localhost composetest]# vi requirements.txt
+        flask
+        redis
+
+        Flask是Python中一个微型的 Web 开发框架。
+
+        第二步，创建 Dockerfile
+
+        我们来写一个 Dockerfile 来定义 Docker 镜像，此镜像包含了 Python 的依赖包和 Python 环境。
+
+        同样在此目录下，我们创建一个 Dockerfile 文件。
+        [root@localhost ~]#  cd composetest
+        [root@localhost composetest]# vi Dokcerfile
+        FROM python:3.4-alpine
+        ADD . /code
+        WORKDIR /code
+        RUN pip install -r requirements.txt
+        CMD ["python", "app.py"]
+
+        这段代码表示:
+            使用基础镜像 Python 3.4
+            将当前目录映射到镜像/code目录下
+            设置工作目录为 /code
+            安装 Python 依赖包
+            启动 app.py 程序
+
+        第三步，使用 Compose 文件定义一个服务
+
+        在当期目录下，我们创建一个 docker-compose.yml 文件，内容如下：
+        [root@localhost composetest]# vi docker-compose.yml
+        version: '2'
+        services:
+          web:
+            build: .
+            ports:
+             - "5000:5000"
+          redis:
+            image: "redis:alpine"
+
+        这个 Compose 文件定义了两个服务, 一个 Pyhon Web 服务和 redis 服务。
+
+            Pyhon Web 服务：使用 Dockerfile 构建了当前镜像。将 Web 容器内部的5000端口映射到 host 的5000端口；并将 Web 容器与 redis 容器连接。
+            redis服务：该容器直接由官方的 redis 镜像创建。
+
+        第四步，使用 Compose 编译启动应用
+
+        使用命令docker-compose up启动
+        [root@localhost composetest]# docker-compose up
+        version: '2'
+        services:
+          web:
+            build: .
+            command: python app.py
+            ports:
+             - "5000:5000"
+            volumes:
+             - .:/code
+          redis:
+            image: "redis:alpine"
+
+        启动成功之后，在浏览器访问：http://ipaddress:5000/ ，返回如下：
+
+        Hello World! I have been seen 1 times.
+
+        刷新再次访问返回
+
+        Hello World! I have been seen 2 times.
+
+        不断的刷新数字会不断的增长。
+
+        Docker Compose 常用命令
+
+        使用docker-compose up -d在后台启动服务
+        [root@localhost composetest]# docker-compose up -d
+        Starting composetest_web_1 ... 
+        Starting composetest_web_1 ... done
+
+        使用docker-compose ps命令查看启动的服务
+        [root@localhost composetest]# docker-compose ps
+               Name                      Command               State           Ports         
+        -------------------------------------------------------------------------------------
+        composetest_redis_1   docker-entrypoint.sh redis ...   Up      6379/tcp              
+        composetest_web_1     python app.py                    Up      0.0.0.0:5000->5000/tcp
+
+        使用docker-compose stop停止服务。
+        [root@localhost composetest]# docker-compose stop
+        Stopping composetest_web_1   ... done
+        Stopping composetest_redis_1 ... done
+
+        docker-compose其它常用命令
+
+        #查看帮助
+        docker-compose -h
+
+        # -f  指定使用的 Compose 模板文件，默认为 docker-compose.yml，可以多次指定。
+        docker-compose -f docker-compose.yml up -d 
+
+        #启动所有容器，-d 将会在后台启动并运行所有的容器
+        docker-compose up -d
+
+        #停用移除所有容器以及网络相关
+        docker-compose down
+
+        #查看服务容器的输出
+        docker-compose logs
+
+        #列出项目中目前的所有容器
+        docker-compose ps
+
+        #构建（重新构建）项目中的服务容器。服务容器一旦构建后，将会带上一个标记名，例如对于 web 项目中的一个 db 容器，可能是 web_db。可以随时在项目目录下运行 docker-compose build 来重新构建服务
+        docker-compose build
+
+        #拉取服务依赖的镜像
+        docker-compose pull
+
+        #重启项目中的服务
+        docker-compose restart
+
+        #删除所有（停止状态的）服务容器。推荐先执行 docker-compose stop 命令来停止容器。
+        docker-compose rm 
+
+        #在指定服务上执行一个命令。
+        docker-compose run ubuntu ping docker.com
+
+        #设置指定服务运行的容器个数。通过 service=num 的参数来设置数量
+        docker-compose scale web=3 db=2
+
+        #启动已经存在的服务容器。
+        docker-compose start
+
+        #停止已经处于运行状态的容器，但不删除它。通过 docker-compose start 可以再次启动这些容器。
+        docker-compose stop
+
+
+Docker Machine 介绍
+
+    Docker Machine 是 Docker 官方编排（Orchestration）项目之一，负责在多种平台上快速安装 Docker 环境。
+
+    Docker Machine 是一个工具，它允许你在虚拟宿主机上安装 Docker Engine ，并使用 docker-machine 命令管理这些宿主机。你可以使用 Machine 在你本地的 Mac 或 Windows box、公司网络、数据中心、或像 AWS 或 Digital Ocean 这样的云提供商上创建 Docker 宿主机。
+
+    使用 docker-machine 命令，你可以启动、审查、停止和重新启动托管的宿主机、升级 Docker 客户端和守护程序、并配置 Docker 客户端与你的宿主机通信。
+    为什么要使用它？
+
+    Docker Machine 使你能够在各种 Linux 上配置多个远程 Docker 宿主机。
+    此外，Machine 允许你在较早的 Mac 或 Windows 系统上运行 Docker，如上一主题所述。
+    Docker Machine 有这两个广泛的用例。
+
+        我有一个较旧的桌面系统，并希望在 Mac 或 Windows 上运行 Docker
+
+    如果你主要在不符合新的 Docker for Mac 和 Docker for Windows 应用程序的旧 Mac 或 Windows 笔记本电脑或台式机上工作，则需要 Docker Machine 来在本地“运行Docker”（即Docker Engine）。在 Mac 或 Windows box 中使用 Docker Toolbox 安装程序安装 Docker Machine 将为 Docker Engine 配置一个本地的虚拟机，使你能够连接它、并运行 docker 命令。
+
+        我想在远程系统上配置 Docker 宿主机
+
+    Docker Engine Linux 系统上原生地运行。如果你有一个 Linux 作为你的主系统，并且想要运行 docker 命令，所有你需要做的就是下载并安装 Docker Engine 。然而，如果你想要在网络上、云中甚至本地配置多个 Docker 宿主机有一个有效的方式，你需要 Docker Machine。
+
+    无论你的主系统是 Mac、Windows 还是 Linux，你都可以在其上安装 Docker Machine，并使用 docker-machine 命令来配置和管理大量的 Docker 宿主机。它会自动创建宿主机、在其上安装 Docker Engine 、然后配置 docker 客户端。每个被管理的宿主机（“machine”）是 Docker 宿主机和配置好的客户端的结合。
+    Docker Engine 和 Docker Machine 有什么区别？
+
+    当人们说“Docker”时，他们通常是指 Docker Engine，它是一个客户端 - 服务器应用程序，由 Docker 守护进程、一个REST API指定与守护进程交互的接口、和一个命令行接口（CLI）与守护进程通信（通过封装REST API）。Docker Engine 从 CLI 中接受docker 命令，例如 docker run 、docker ps 来列出正在运行的容器、docker images 来列出镜像，等等。
+
+    Docker Machine 是一个用于配置和管理你的宿主机（上面具有 Docker Engine 的主机）的工具。通常，你在你的本地系统上安装 Docker Machine。Docker Machine有自己的命令行客户端 docker-machine 和 Docker Engine 客户端 docker。你可以使用 Machine 在一个或多个虚拟系统上安装 Docker Engine。
+
+    这些虚拟系统可以是本地的（就像你在 Mac 或 Windows 上使用 Machine 在 VirtualBox 中安装和运行 Docker Engine 一样）或远程的（就像你使用 Machine 在云提供商上 provision Dockerized 宿主机一样）。Dockerized 宿主机本身可以认为是，且有时就称为，被管理的“machines”。
+
+
+    Docker Machine 安装
+
+        # curl -L https://github.com/docker/machine/releases/download/v0.14.0/docker-machine-`uname -s`-`uname -m` >/tmp/docker-machine && install /tmp/docker-machine /usr/local/bin/docker-machine
+
+        #完成后，查看版本信息。
+        # docker-machine -v
+        # docker-machine version 0.14.0, build 89b8332
+
+        错误提示：Error with pre-create check: "VBoxManage not found. Make sure VirtualBox is installed and VBoxManage is in the path"
+        解决方法：配置virtualbox所指定的仓库
+        # wget -q https://www.virtualbox.org/download/oracle_vbox.asc
+        # rpm --import oracle_vbox.asc
+        # vi /etc/yum.repos.d/virtualbox.repo 
+        [virtualbox]
+        name=Oracle Linux / RHEL / CentOS-releasever /basearch - VirtualBox
+        baseurl=http://download.virtualbox.org/virtualbox/rpm/el/$releasever/$basearch
+        enabled=1
+        gpgcheck=0
+        repo_gpgcheck=0
+        gpgkey=https://www.virtualbox.org/download/oracle_vbox.asc
+        # yum repolist #重新加载仓库
+        # yum search VirtualBox  #搜索virtualbox镜像
+        # yum install VirtualBox-5.2 #安装VirtualBox5.2镜像
+        # sudo /sbin/vboxconfig   #重新加载virtualbox服务
+
+
+        错误提示：curl: (60) Peer's Certificate has expired.时间不一致造成的，安装chrony同步时间即可
+        解决方法：
+        # yum -y install chrony
+        # systemctl start chronyd
+        # chronyc sources
+
+        [root@node4 ~]# docker-machine create --driver virtualbox default
+        错误提示：Error with pre-create check: "This computer doesn't have VT-X/AMD-v enabled. Enabling it in the BIOS is mandatory"
+        解决方法：首先保证bios是开启虚拟化的，然后一般虚拟化主机ESXI都会开BIOS中的CPU虚拟化技术， INTEL叫VT-x，AMD的叫AMD-V。
+        ESXI6.0 CPU虚拟化是在web端设置的，在客户端vsphere中没有这个设置，切记！再次创建主机就正常了。
+
+        创建一个 VirtualBox
+
+        查看是否存在可用的主机
+        [root@node4 ~]# docker-machine ls
+        NAME   ACTIVE   DRIVER   STATE   URL   SWARM   DOCKER   ERRORS
+
+        创建一个主机:
+        [root@node4 ~]# docker-machine create --driver virtualbox default
+
+        这个命令会下载 boot2docker，基于 boot2docker 创建一个虚拟主机。boot2docker 是一个轻量级的 linux 发行版，基于专门为运行 docker 容器而设计的 Tiny Core Linux 系统，完全从 RAM 运行，45Mb左右，启动时间约5s。
+
+        再次查看服务列表
+        [root@node4 ~]# docker-machine ls
+        NAME      ACTIVE   DRIVER       STATE     URL                         SWARM   DOCKER        ERRORS
+        default   *        virtualbox   Running   tcp:#192.168.99.100:2376           v17.12.1-ce
+
+        发现已经存在一个虚拟主机
+
+        创建主机成功后，可以通过 env 命令来让后续操作对象都是目标主机。
+        [root@node4 ~]# docker-machine env default
+        export DOCKER_TLS_VERIFY="1"
+        export DOCKER_HOST="tcp:#192.168.99.100:2376"
+        export DOCKER_CERT_PATH="C:\Users\hkrt-neo\.docker\machine\machines\default"
+        export DOCKER_MACHINE_NAME="default"
+        export COMPOSE_CONVERT_WINDOWS_PATHS="true"
+        # Run this command to configure your shell:
+        # eval $("D:\Program Files\Docker Toolbox\docker-machine.exe" env default)
+
+        相当于配置了一个环境变量 default，后续根据提示在命令行输入命令之后就可以操作 default 主机。
+
+        可以通过 SSH 登录到主机
+
+        [root@node4 ~]# docker-machine ssh default
+
+        docker@default:~$ docker --version
+        Docker version 17.12.1-ce, build 7390fc6
+
+        连接到主机之后你就可以在其上使用 Docker 了，退出虚拟机使用命令：exit
+
+        Docker Machine常用命令
+
+        #创建虚拟机
+        docker-machine create [OPTIONS] [arg...]
+
+        #移除虚拟机
+        docker-machine rm [OPTIONS] [arg...]
+
+        #登录虚拟机
+        docker-machine ssh [arg...]
+
+        #docker客户端配置环境变量
+        docker-machine env [OPTIONS] [arg...]
+
+        #检查机子信息
+        docker-machine inspect
+
+        #查看虚拟机列表
+        docker-machine ls [OPTIONS] [arg...]
+
+        #查看虚拟机状态
+        docker-machine status [arg...]  #一个虚拟机名称
+
+        #启动虚拟机
+        docker-machine start [arg...]  #一个或多个虚拟机名称
+
+        #停止虚拟机
+        docker-machine stop [arg...]  #一个或多个虚拟机名称
+
+        #重启虚拟机
+        docker-machine restart [arg...]  #一个或多个虚拟机名称
+
+
+
+Docker Swarm 介绍
+
+    Swarm 在 Docker 1.12 版本之前属于一个独立的项目，在 Docker 1.12 版本发布之后，该项目整合到了 Docker 中，成为 Docker 的一个子命令。目前，Swarm 是 Docker 社区提供的唯一一个原生支持 Docker 集群管理的工具。它可以把多个 Docker 主机组成的系统转换为单一的虚拟 Docker 主机，使得容器可以组成跨主机的子网网络。
+
+    Docker Swarm 是一个为 IT 运维团队提供集群和调度能力的编排工具。用户可以把集群中所有 Docker Engine 整合进一个虚拟 Engine的资源池，通过执行命令与单一的主 Swarm 进行沟通，而不必分别和每个 Docker Engine 沟通。在灵活的调度策略下，IT 团队可以更好地管理可用的主机资源，保证应用容器的高效运行。
+
+    Docker Swarm 优点
+
+    任何规模都有高性能表现
+
+        对于企业级的 Docker Engine 集群和容器调度而言，可拓展性是关键。任何规模的公司——不论是拥有五个还是上千个服务器——都能在其环境下有效使用 Swarm。
+经过测试，Swarm 可拓展性的极限是在 1000 个节点上运行 50000 个部署容器，每个容器的启动时间为亚秒级，同时性能无减损。
+
+    灵活的容器调度
+
+        Swarm 帮助 IT 运维团队在有限条件下将性能表现和资源利用最优化。Swarm 的内置调度器（scheduler）支持多种过滤器，包括：节点标签，亲和性和多种容器部策略如 binpack、spread、random 等等。
+
+    服务的持续可用性
+
+        Docker Swarm 由 Swarm Manager 提供高可用性，通过创建多个 Swarm master 节点和制定主 master 节点宕机时的备选策略。如果一个 master 节点宕机，那么一个 slave 节点就会被升格为 master 节点，直到原来的 master 节点恢复正常。
+此外，如果某个节点无法加入集群，Swarm 会继续尝试加入，并提供错误警报和日志。在节点出错时，Swarm 现在可以尝试把容器重新调度到正常的节点上去。
+
+    和 Docker API 及整合支持的兼容性
+Swarm 对 Docker API 完全支持，这意味着它能为使用不同 Docker 工具（如 Docker CLI，Compose，Trusted Registry，Hub 和 UCP）的用户提供无缝衔接的使用体验。
+
+    Docker Swarm 为 Docker 化应用的核心功能（诸如多主机网络和存储卷管理）提供原生支持。开发的 Compose 文件能（通过 docker-compose up ）轻易地部署到测试服务器或 Swarm 集群上。Docker Swarm 还可以从 Docker Trusted Registry 或 Hub 里 pull 并 run 镜像。
+
+综上所述，Docker Swarm 提供了一套高可用 Docker 集群管理的解决方案，完全支持标准的 Docker API，方便管理调度集群 Docker 容器，合理充分利用集群主机资源。
+
+    * 并非所有服务都应该部署在Swarm集群内。数据库以及其它有状态服务就不适合部署在Swarm集群内。*
+
+    节点
+
+        运行 Docker 的主机可以主动初始化一个 Swarm 集群或者加入一个已存在的 Swarm 集群，这样这个运行 Docker 的主机就成为一个 Swarm 集群的节点 (node) 。节点分为管理 (manager) 节点和工作 (worker) 节点。
+
+            管理节点用于 Swarm 集群的管理，docker swarm 命令基本只能在管理节点执行（节点退出集群命令 docker swarm leave 可以在工作节点执行）。一个 Swarm 集群可以有多个管理节点，但只有一个管理节点可以成为 leader，leader 通过 raft 协议实现。
+
+            工作节点是任务执行节点，管理节点将服务 (service) 下发至工作节点执行。管理节点默认也作为工作节点。你也可以通过配置让服务只运行在管理节点。下图展示了集群中管理节点与工作节点的关系。
+
+    服务和任务
+        任务(Task)是Swarm 中的最小的调度单位，目前来说就是一个单一的容器。
+        服务(Services)是指一组任务的集合，服务定义了任务的属性。服务有两种模式：
+            replicated services 按照一定规则在各个工作节点上运行指定个数的任务。
+            global services 每个工作节点上运行一个任务
+
+        两种模式通过 docker service create 的 –mode 参数指定。下图展示了容器、
+
+
+(一)创建 Swarm 集群
+
+我们知道 Swarm 集群由管理节点和工作节点组成。我们来创建一个包含一个管理节点和两个工作节点的最小 Swarm 集群。
+
+初始化集群
+
+查看虚拟主机状态
+[root@node4 ~]# docker-machine ls
+NAME   ACTIVE   DRIVER   STATE   URL   SWARM   DOCKER   ERRORS
+
+使用 virtualbox 创建管理节点,进入管理节点
+[root@node4 ~]# docker-machine create --driver virtualbox manager1
+[root@node4 ~]# docker-machine ssh manager1
+
+执行 sudo -i 可以进入Root 权限
+
+我们使用 docker swarm init 在 manager1 初始化一个 Swarm 集群。
+docker@manager1:~$ sudo -i
+root@manager1:~# docker swarm init --advertise-addr 192.168.99.100
+Swarm initialized: current node (j0o7sykkvi86xpc00w71ew5b6) is now a manager.
+
+To add a worker to this swarm, run the following command:
+
+    docker swarm join --token SWMTKN-1-47z6jld2o465z30dl7pie2kqe4oyug4fxdtbgkfjqgybsy4esl-8r55lxhxs7ozfil45gedd5b8a 192.168.99.100:2377
+
+To add a manager to this swarm, run 'docker swarm join-token manager' and follow the instructions.
+
+如果你的 Docker 主机有多个网卡，拥有多个 IP，必须使用 –advertise-addr 指定 IP。
+执行 docker swarm init 命令的节点自动成为管理节点。
+
+命令 docker info 可以查看 swarm 集群状态:
+root@manager1:~# docker info 
+Containers: 0
+Running: 0
+Paused: 0
+Stopped: 0
+  ...snip...
+Swarm: active
+  NodeID: dxn1zf6l61qsb1josjja83ngz
+  Is Manager: true
+  Managers: 1
+  Nodes: 1
+  ...snip...
+
+命令 docker node ls 可以查看集群节点信息:
+root@manager1:~# docker node ls
+ID                            HOSTNAME            STATUS              AVAILABILITY        MANAGER STATUS
+1ipck4z2uuwf11f4b9mnon2ul *   manager1            Ready               Active              Leader
+
+
+(二)增加工作节点
+
+上一步初始化了一个 Swarm 集群，拥有了一个管理节点，在 Docker Machine 一节中我们了解到 Docker Machine 可以在数秒内创建一个虚拟的 Docker 主机，下面我们使用它来创建两个 Docker 主机，并加入到集群中。
+
+创建虚拟主机 worker1
+[root@node4 ~]# docker-machine create -d virtualbox worker1
+
+进入虚拟主机 worker1
+[root@node4 ~]# docker-machine ssh worker1
+
+加入 swarm 集群
+docker@worker1:~$ docker swarm join \
+    --token SWMTKN-1-47z6jld2o465z30dl7pie2kqe4oyug4fxdtbgkfjqgybsy4esl-8r55lxhxs7ozfil45gedd5b8a \
+    192.168.99.100:2377
+
+This node joined a swarm as a worker.  
+
+
+创建虚拟主机 worker2
+[root@node4 ~]# docker-machine create -d virtualbox worker2
+
+进入虚拟主机worker2
+[root@node4 ~]# docker-machine ssh worker2
+
+加入 swarm 集群
+docker@worker2:~$ docker swarm join \
+    --token SWMTKN-1-47z6jld2o465z30dl7pie2kqe4oyug4fxdtbgkfjqgybsy4esl-8r55lxhxs7ozfil45gedd5b8a \
+    192.168.99.100:2377
+
+This node joined a swarm as a worker. 
+
+
+(三)查看集群
+
+宿主机子上查看虚拟主机
+[root@node4 ~]# docker-machine ls
+NAME       ACTIVE   DRIVER       STATE     URL                         SWARM   DOCKER        ERRORS
+manager1   *        virtualbox   Running   tcp://192.168.99.100:2376           v17.12.1-ce
+worker1    -        virtualbox   Running   tcp://192.168.99.101:2376           v17.12.1-ce
+worker2    -        virtualbox   Running   tcp://192.168.99.102:2376           v17.12.1-ce
+
+进入管理节点：
+[root@node4 ~]# docker-machine ssh manager1
+
+在主节点上面执行 docker node ls 查询集群主机信息
+docker@manager1:~$ docker node ls
+ID                            HOSTNAME            STATUS              AVAILABILITY        MANAGER STATUS
+1ipck4z2uuwf11f4b9mnon2ul *   manager1            Ready               Active              Leader
+rtcpqgcn2gytnvufwfveukgrv     worker1             Ready               Active
+te2e9tr0qzbetjju5gyahg6f7     worker2             Ready               Active
+
+这样我们就创建了一个最小的 Swarm 集群，包含一个管理节点和两个工作节点。
+
+(四)部署服务
+
+我们使用 docker service 命令来管理 Swarm 集群中的服务，该命令只能在管理节点运行。
+
+新建服务
+
+进入集群管理节点：
+[root@node4 ~]# docker-machine ssh manager1
+
+使用 docker 中国镜像
+docker@manager1:~$ docker search alpine 
+docker@manager1:~$ docker pull registry.docker-cn.com/library/alpine
+
+创建的 Swarm 集群中运行一个名为 helloworld 服务。
+docker@manager1:~$ docker service create --replicas 1 --name helloworld alpine ping ityouknow.com
+rwpw7eij4v6h6716jvqvpxbyv
+overall progress: 1 out of 1 tasks
+1/1: running   [==================================================>]
+verify: Service converged
+
+option：
+    docker service create 命令创建一个服务
+    --name 服务名称命名为 helloworld
+    --replicas 设置启动的示例数
+    alpine指的是使用的镜像名称，ping ityouknow.com指的是容器运行的bash
+
+查看服务进展
+docker@manager1:~$ docker service ps rwpw7eij4v6h6716jvqvpxbyv
+ID                  NAME                IMAGE               NODE                DESIRED STATE       CURRENT STATE                ERROR               PORTS
+rgroe3s9qa53        helloworld.1        alpine:latest       worker1            Running             Running about a minute ago
+
+查看当前 Swarm 集群运行的服务。
+docker@manager1:~$ docker service ls
+ID                  NAME                MODE                REPLICAS            IMAGE               PORTS
+yzfmyggfky8c        helloworld          replicated          0/1                 alpine:latest
+
+(五)监控集群状态
+
+登录管理节点 manager1
+[root@node4 ~]# docker-machine ssh manager1
+
+查询服务概要状态，以 helloworld 服务为例：
+docker@manager1:~$ docker service inspect --pretty helloworld
+ID:             rwpw7eij4v6h6716jvqvpxbyv
+Name:           helloworld
+Service Mode:   Replicated
+ Replicas:      1
+Placement:
+UpdateConfig:
+ Parallelism:   1
+ On failure:    pause
+ Monitoring Period: 5s
+ Max failure ratio: 0
+ ...
+ Rollback order:    stop-first
+ContainerSpec:
+ Image:         alpine:latest@sha256:7b848083f93822dd21b0a2f14a110bd99f6efb4b838d499df6d04a49d0debf8b
+ Args:          ping ityouknow.com
+Resources:
+Endpoint Mode:  vip
+
+
+查询服务详细信息。
+
+运行docker service ps <SERVICE-ID> 查看那个节点正在运行服务:
+
+docker@manager1:~$  docker service ps helloworld
+NAME                                    IMAGE   NODE     DESIRED STATE  LAST STATE
+helloworld.1.8p1vev3fq5zm0mi8g0as41w35  alpine  worker1  Running        Running 3 minutes
+
+在工作节点查看任务的执行情况
+[root@node4 ~]# docker-machine ssh  worker1
+
+在节点查看容器的运行状态。
+docker@worker1:~$ docker ps
+CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS               NAMES
+96bf5b1d8010        alpine:latest       "ping ityouknow.com"   4 minutes ago       Up 4 minutes                            helloworld.1.rgroe3s9qa53lf4u4ky0tzcb8
+
+Swarm 集群中成功的运行了一个 helloworld 服务，根据命令可以看出在 worker1 节点上运行。
+
+(五)弹性伸缩实验
+
+我们来做一组实验来感受 Swarm 强大的动态水平扩展特性，首先动态调整服务实例个数。
+
+调整实例个数
+
+增加或者减少服务的节点数
+
+调整 helloworld 的服务实例数为2个
+docker@manager1:~$ docker service update --replicas 2 helloworld
+
+查看那个节点正在运行服务:
+docker@manager1:~$ docker service ps helloworld
+ID                  NAME                IMAGE               NODE                DESIRED STATE       CURRENT STATE                 ERROR                              PORTS
+rgroe3s9qa53        helloworld.1        alpine:latest       manager1            Running             Running 8 minutes ago
+a61nqrmfhyrl        helloworld.2        alpine:latest       worker2             Running             Running 9 seconds ago
+
+
+调整 helloworld 的服务实例数为1个
+docker@manager1:~$ docker service update --replicas 1 helloworld
+
+再次查看节点运行情况:
+docker@manager1:~$ docker service ps helloworld
+ID                  NAME                IMAGE               NODE                DESIRED STATE       CURRENT STATE                 ERROR                              PORTS
+a61nqrmfhyrl        helloworld.2        alpine:latest       worker2             Running             Running about a minute ago
+
+再次调整 helloworld 的服务实例数为3个
+docker@manager1:~$ docker service update --replicas 3 helloworld
+helloworld
+overall progress: 3 out of 3 tasks
+1/3: running   [==================================================>]
+2/3: running   [==================================================>]
+3/3: running   [==================================================>]
+verify: Service converged
+
+查看节点运行情况：
+docker@manager1:~$ docker service ps helloworld
+ID                  NAME                IMAGE               NODE                DESIRED STATE       CURRENT STATE             ERROR                              PORTS
+mh7ipjn74o0d        helloworld.1        alpine:latest       worker2             Running             Running 40 seconds ago
+1w4p9okvz0xw        helloworld.2        alpine:latest       manager1            Running             Running 2 minutes ago
+snqrbnh4k94y        helloworld.3        alpine:latest       worker1             Running             Running 32 seconds ago
+
+删除集群服务
+docker@manager1:~$ docker service rm helloworld
+helloworld
+docker@manager1:~$ docker service ps helloworld 
+no such service: helloworld
+docker@manager1:~$ 
+
+(六)调整集群大小
+
+动态调整 Swarm 集群的工作节点。
+
+添加集群创建虚拟主机 worker3
+[root@node4 ~]# docker-machine create -d virtualbox worker3
+
+进入虚拟主机 worker3
+[root@node4 ~]# docker-machine ssh worker3
+
+加入swarm 集群
+docker@worker3:~$ docker swarm join \
+    --token SWMTKN-1-47z6jld2o465z30dl7pie2kqe4oyug4fxdtbgkfjqgybsy4esl-8r55lxhxs7ozfil45gedd5b8a \
+    192.168.99.100:2377
+
+This node joined a swarm as a worker. 
+
+
+在主节点上面执行 docker node ls 查询集群主机信息
+
+登录manager1点
+[root@node4 ~]# docker-machine ssh  manager1
+
+查看集群节点
+docker@manager1:~$ docker node ls
+ID                            HOSTNAME            STATUS              AVAILABILITY        MANAGER STATUS
+j0o7sykkvi86xpc00w71ew5b6 *   manager1            Ready               Active              Leader
+xwv8aixasqraxwwpox0d0bp2i     worker1             Ready               Active
+ij3z1edgj7nsqvl8jgqelrfvy     worker2             Ready               Active
+i31yuluyqdboyl6aq8h9nk2t5     worker3             Ready               Active
+
+可以看出集群节点多了 worker3
+
+(七)退出 Swarm 集群
+
+如果 Manager 想要退出 Swarm 集群， 在 Manager Node 上执行命令：docker swarm leave  
+
+就可以退出集群，如果集群中还存在其它的 Worker Node，还希望 Manager 退出集群，则加上一个强制选项，命令行所示：docker swarm leave --force
+
+在 Worker2 上进行退出测试，登录worker2节点
+[root@node4 ~]# docker-machine ssh  worker2
+
+执行退出命令
+docker@worker2:~$ docker swarm leave 
+
+查看集群节点情况：
+docker@manager1:~$ docker node ls
+ID                            HOSTNAME            STATUS              AVAILABILITY        MANAGER STATUS
+j0o7sykkvi86xpc00w71ew5b6 *   manager1            Ready               Active              Leader
+xwv8aixasqraxwwpox0d0bp2i     worker1             Ready               Active
+ij3z1edgj7nsqvl8jgqelrfvy     worker2             Down                Active
+i31yuluyqdboyl6aq8h9nk2t5     worker3             Ready               Active
+
+可以看出集群节点 worker2 状态已经下线
+
+也可以再次加入
+docker@worker2:~$ docker swarm join \
+>     --token SWMTKN-1-47z6jld2o465z30dl7pie2kqe4oyug4fxdtbgkfjqgybsy4esl-8r55lxhxs7ozfil45gedd5b8a \
+>     192.168.99.100:2377
+This node joined a swarm as a worker.
+
+再次查看
+docker@manager1:~$ docker node ls
+ID                            HOSTNAME            STATUS              AVAILABILITY        MANAGER STATUS
+j0o7sykkvi86xpc00w71ew5b6 *   manager1            Ready               Active              Leader
+xwv8aixasqraxwwpox0d0bp2i     worker1             Ready               Active
+0agpph1vtylm421rhnx555kkc     worker2             Ready               Active
+ij3z1edgj7nsqvl8jgqelrfvy     worker2             Down                Active
+i31yuluyqdboyl6aq8h9nk2t5     worker3             Ready               Active
+
+可以看出集群节点 worker2 又重新加入到了集群中
+
+（八）重新搭建命令
+
+使用 VirtualBox 做测试的时候，如果想重复实验可以将实验节点删掉再重来。
+
+//停止虚拟机
+docker-machine stop [arg...]  //一个或多个虚拟机名称
+
+[root@node4 ~]# docker-machine stop manager1 worker1 worker2
+
+//移除虚拟机
+docker-machine rm [OPTIONS] [arg...]
+
+[root@node4 ~]# docker-machine rm manager1 worker1 worker2
+
+
+
+
+
+
+
+
+
+
+
+
+        pip安装：
+        pip install docker-compose
+        	
+        从github安装：
+        curl -L --fail https:#github.com/docker/compose/releases/download/1.17.0/run.sh -o /usr/local/bin/docker-compose
+        chmod +x /usr/local/bin/docker-compose
+        #查看版本
+        docker-compose version
+
+
+
+        命令说明:
+
+        docker-compose --help
+
+    Docker Machine
+
+    Github地址： https:#github.com/docker/machine/
+    Docker Machine 是 Docker 官方编排（Orchestration）项目之一，负责在多种平台上快速安装 Docker 环境。
+    Docker Machine 项目基于 Go 语言实现，目前在 Github 上进行维护。
+
+        安装：
+
+        curl -L https:#github.com/docker/machine/releases/download/v0.13.0/docker-machine-`uname -s`-`uname -m` > /usr/local/bin/docker-machine
+        chmod +x /usr/local/bin/docker-machine
+
+        完成后，查看版本信息：
+
+        # docker-machine -v
+        docker-machine version 0.13.0, build 9ba6da9
+
+        为了得到更好的体验，我们可以安装 bash completion script，这样在 bash 能够通过 tab 键补全 docker-mahine 的子命令和参数。
+        下载方法：
+
+        base=https:#raw.githubusercontent.com/docker/machine/v0.13.0
+        for i in docker-machine-prompt.bash docker-machine-wrapper.bash docker-machine.bash
+        do
+          sudo wget "$base/contrib/completion/bash/${i}" -P /etc/bash_completion.d
+        done
+
+        确认版本将其放置到 /etc/bash_completion.d 目录下。
+        然后在你的bash终端中运行如下命令，告诉你的设置在哪里可以找到docker-machine-prompt.bash你以前下载的文件 。
+
+        source /etc/bash_completion.d/docker-machine-prompt.bash
+
+        要启用docker-machine shell提示符，请添加 $(__docker_machine_ps1)到您的PS1设置中~/.bashrc。
+
+        PS1='[\u@\h \W$(__docker_machine_ps1)]\$ '
+
+使用：
+
+    Docker Machine 支持多种后端驱动，包括虚拟机、本地主机和云平台等
+
+创建本地主机实例：
+使用 virtualbox 类型的驱动，创建一台 Docker主机，命名为test
+
+安装VirtualBox：
+
+配置源：
+# cat /etc/yum.repos.d/virtualbox.repo 
+[virtualbox]
+name=Oracle Linux / RHEL / CentOS-$releasever / $basearch - VirtualBox
+baseurl=http:#download.virtualbox.org/virtualbox/rpm/el/$releasever/$basearch
+enabled=1
+gpgcheck=0
+repo_gpgcheck=0
+gpgkey=https:#www.virtualbox.org/download/oracle_vbox.asc
+
+#安装VirtualBox：
+yum search VirtualBox
+yum install -y VirtualBox-5.2
+/sbin/vboxconfig    # 重新加载VirtualBox服务
+
+
+创建主机：
+
+#  docker-machine create -d virtualbox test
+Running pre-create checks...
+Creating machine...
+(test) Copying /root/.docker/machine/cache/boot2docker.iso to /root/.docker/machine/machines/test/boot2docker.iso...
+(test) Creating VirtualBox VM...
+(test) Creating SSH key...
+(test) Starting the VM...
+(test) Check network to re-create if needed...
+(test) Found a new host-only adapter: "vboxnet0"
+(test) Waiting for an IP...
+Waiting for machine to be running, this may take a few minutes...
+Detecting operating system of created instance...
+Waiting for SSH to be available...
+Detecting the provisioner...
+Provisioning with boot2docker...
+Copying certs to the local machine directory...
+Copying certs to the remote machine...
+Setting Docker configuration on the remote daemon...
+Checking connection to Docker...
+Docker is up and running!
+To see how to connect your Docker Client to the Docker Engine running on this virtual machine, run: docker-machine env test
+
+也可以在创建时加上如下参数，来配置主机或者主机上的 Docker。
+
+--engine-opt dns=114.114.114.114   #配置 Docker 的默认 DNS
+--engine-registry-mirror https:#registry.docker-cn.com #配置 Docker 的仓库镜像
+--virtualbox-memory 2048 #配置主机内存
+--virtualbox-cpu-count 2 #配置主机 CPU
+
+更多参数请使用 docker-machine create --driver virtualbox --help 命令查看。
+
+查看主机：
+
+# docker-machine ls
+NAME   ACTIVE   DRIVER       STATE     URL                         SWARM   DOCKER        ERRORS
+test   -        virtualbox   Running   tcp:#192.168.99.100:2376           v18.05.0-ce  		
+
+创建主机成功后，可以通过 env 命令来让后续操作目标主机：
+
+docker-machine env test
+
+可以通过 SSH 登录到主机：
+
+docker-machine ssh test
+
+官方支持驱动：
+
+# 通过 -d 选项可以选择支持的驱动类型。
+amazonec2
+azure
+digitalocean
+exoscale
+generic
+google
+hyperv
+none
+openstack
+rackspace
+softlayer
+virtualbox
+vmwarevcloudair
+vmwarefusion
+vmwarevsphere
+
+
+第三方驱动请到 第三方驱动列表 查看
+
+常用操作命令：
+
+active   查看活跃的 Docker 主机
+config   输出连接的配置信息
+create   创建一个 Docker 主机
+env      显示连接到某个主机需要的环境变量
+inspect  输出主机更多信息
+ip       获取主机地址
+kill     停止某个主机
+ls       列出所有管理的主机
+provision 重新设置一个已存在的主机
+regenerate-certs 为某个主机重新生成 TLS 认证信息
+restart  重启主机
+rm       删除某台主机
+ssh SSH  到主机上执行命令
+scp      在主机之间复制文件
+mount    挂载主机目录到本地
+start    启动一个主机
+status   查看主机状态
+stop     停止一个主机
+upgrade  更新主机 Docker 版本为最新
+url      获取主机的 URL
+version  输出 docker-machine 版本信息
+help     输出帮助信息
+
+每个命令，又带有不同的参数，可以通过docker-machine COMMAND --help查看。
+
+
+Docker Swarm
+
+Docker Swarm 是 Docker 官方三剑客项目之一，提供 Docker 容器集群服务，是 Docker 官方对容器云生态进行支持的核心方案。使用它，用户可以将多个 Docker 主机封装为单个大型的虚拟 Docker 主机，快速打造一套容器云平台。
+
+    Docker 1.12 Swarm mode 已经内嵌入 Docker 引擎，成为了 docker 子命令 docker swarm。请注意与旧的 Docker Swarm 区分开来。
+
+Swarm mode内置kv存储功能，提供了众多的新特性，比如：具有容错能力的去中心化设计、内置服务发现、负载均衡、路由网格、动态伸缩、滚动更新、安全传输等。使得 Docker 原生的 Swarm 集群具备与 Mesos、Kubernetes 竞争的实力。
+基本概念
+
+Swarm 是使用 SwarmKit 构建的 Docker 引擎内置（原生）的集群管理和编排工具。
+
+节点：
+运行 Docker 的主机可以主动初始化一个 Swarm 集群或者加入一个已存在的 Swarm 集群，这样这个运行 Docker 的主机就成为一个 Swarm 集群的节点 (node)
+
+节点分为管理 (manager) 节点和工作 (worker) 节点
+
+    管理节点：用于 Swarm 集群的管理，docker swarm 命令基本只能在管理节点执行（节点退出集群命令 docker swarm leave 可以在工作节点执行）。一个 Swarm 集群可以有多个管理节点，但只有一个管理节点可以成为 leader，leader 通过 raft 协议实现。
+    工作节点：是任务执行节点，管理节点将服务 (service) 下发至工作节点执行。管理节点默认也作为工作节点。也可以通过配置让服务只运行在管理节点。
+
+集群中管理节点与工作节点的关系如下所示：
+这里写图片描述
+服务和任务：
+任务 （Task）是 Swarm 中的最小的调度单位，目前来说就是一个单一的容器。
+服务 （Services） 是指一组任务的集合，服务定义了任务的属性。服务有两种模式：
+
+    replicated services 按照一定规则在各个工作节点上运行指定个数的任务。
+    global services 每个工作节点上运行一个任务。
+
+两种模式通过 docker service create 的 --mode 参数指定。
+容器、任务、服务的关系如下所示：
+这里写图片描述
+
+swarm：
+从 v1.12 开始，集群管理和编排功能已经集成进 Docker Engine。当 Docker Engine 初始化了一个 swarm 或者加入到一个存在的 swarm 时，它就启动了 swarm mode。没启动 swarm mode 时，Docker 执行的是容器命令；运行 swarm mode 后，Docker 增加了编排 service 的能力。
+Docker 允许在同一个 Docker 主机上既运行 swarm service，又运行单独的容器。
+
+node：
+swarm 中的每个 Docker Engine 都是一个 node，有两种类型的 node：manager 和 worker。
+为了向 swarm 中部署应用，我们需要在 manager node 上执行部署命令，manager node 会将部署任务拆解并分配给一个或多个 worker node 完成部署。manager node 负责执行编排和集群管理工作，保持并维护 swarm 处于期望的状态。swarm 中如果有多个 manager node，它们会自动协商并选举出一个 leader 执行编排任务。woker node 接受并执行由 manager node 派发的任务。默认配置下 manager node 同时也是一个 worker node，不过可以将其配置成 manager-only node，让其专职负责编排和集群管理工作。work node 会定期向 manager node 报告自己的状态和它正在执行的任务的状态，这样 manager 就可以维护整个集群的状态。
+
+service：
+service 定义了 worker node 上要执行的任务。swarm 的主要编排任务就是保证 service 处于期望的状态下。
+举一个 service 的例子：在 swarm 中启动一个 http 服务，使用的镜像是 httpd:latest，副本数为 3。manager node 负责创建这个 service，经过分析知道需要启动 3 个 httpd 容器，根据当前各 worker node 的状态将运行容器的任务分配下去，比如 worker1 上运行两个容器，worker2 上运行一个容器。运行了一段时间，worker2 突然宕机了，manager 监控到这个故障，于是立即在 worker3 上启动了一个新的 httpd 容器。这样就保证了 service 处于期望的三个副本状态。
+
+默认配置下 manager node 也是 worker node，所以 swarm-manager 上也运行了副本。如果不希望在 manager 上运行 service，可以执行如下命令：
+
+docker node update --availability drain master
+
+    1
+
+创建swarm集群
+
+Swarm 集群由管理节点和工作节点组成。现在我们来创建一个包含一个管理节点和两个工作节点的最小 Swarm 集群。
+
+初始化集群：
+使用Docker Machine创建三个 Docker 主机，并加入到集群中
+
+首先创建一个 Docker 主机作为管理节点：
+
+docker-machine create -d virtualbox manger
+
+    1
+
+使用 docker swarm init 在管理节点初始化一个 Swarm 集群
+
+docker-machine ssh manger
+
+docker@manger:~$ docker swarm init --advertise-addr 192.168.99.101
+Swarm initialized: current node (fwh0yy8m8bygdxnsl7x1peioj) is now a manager.
+
+To add a worker to this swarm, run the following command:
+
+	docker swarm join --token SWMTKN-1-2acj2brip56iee9p4hc7klx3i6ljnpykh5lx6ea3t9xlhounnv-70knqo263hphhse02gxuvja12 192.168.99.101:2377
+
+To add a manager to this swarm, run 'docker swarm join-token manager' and follow the instructions.
+
+docker@manger:~$
+
+注意：如果你的 Docker 主机有多个网卡，拥有多个 IP，必须使用 --advertise-addr 指定 IP。
+
+    执行 docker swarm init 命令的节点自动成为管理节点。
+
+增加工作节点：
+在docker swarm init 完了之后，会提示如何加入新机器到集群，如果当时没有注意到，也可以通过下面的命令来获知 如何加入新机器到集群。
+
+# docker swarm join-token worker [--quiet]
+# docker swarm join-token manager [--quiet]
+
+根据token的不同，我们来区分加入集群的是manager节点还是普通的节点。通过加入–quiet参数可以只输出token，在需要保存token的时候还是十分有用的。
+
+上一步初始化了一个 Swarm 集群，拥有了一个管理节点，下面继续创建两个 Docker 主机作为工作节点，并加入到集群中。
+
+# docker-machine create -d virtualbox worker1
+
+# docker-machine ssh worker1
+docker@worker1:~$ docker swarm join --token SWMTKN-1-2acj2brip56iee9p4hc7klx3i6ljnpykh5lx6ea3t9xlhounnv-70knqo263hphhse02gxuvja12 192.168.99.101:2377
+This node joined a swarm as a worker.
+docker@worker1:~$ 				
+
+
+# docker-machine create -d virtualbox worker2
+# docker-machine ssh worker2
+docker@worker2:~$ docker swarm join --token SWMTKN-1-2acj2brip56iee9p4hc7klx3i6ljnpykh5lx6ea3t9xlhounnv-70knqo263hphhse02gxuvja12 192.168.99.101:2377
+This node joined a swarm as a worker.
+docker@worker2:~$ 
+
+查看集群：
+在manager machine上执行 docker node ls 查看有哪些节点加入到swarm集群。
+
+# docker-machine ssh manger
+docker@manger:~$ docker node ls
+ID                            HOSTNAME            STATUS              AVAILABILITY        MANAGER STATUS      ENGINE VERSION
+fwh0yy8m8bygdxnsl7x1peioj *   manger              Ready               Active              Leader              18.05.0-ce
+0v6te4mspwu1d1b4250fp5rph     worker1             Ready               Active                                  18.05.0-ce
+mld8rm9z07tveu1iknvws0lr1     worker2             Ready               Active                                  18.05.0-ce		
+
+部署服务
+
+使用 docker service 命令来管理 Swarm 集群中的服务，该命令只能在管理节点运行。
+
+新建服务：
+在上一节创建的 Swarm 集群中运行一个名为 nginx 服务：
+
+docker@manger:~$ docker service create --replicas 3 -p 80:80 --name nginx nginx
+khw3av021hlxs3koanq85301j
+overall progress: 3 out of 3 tasks 
+1/3: running   [==================================================>] 
+2/3: running   [==================================================>] 
+3/3: running   [==================================================>] 
+verify: Service converged 
+docker@manger:~$ 
+
+
+使用浏览器，输入任意节点 IP ,即可看到 nginx 默认页面。
+
+查看服务：
+使用 docker service ls 来查看当前 Swarm 集群运行的服务。
+
+docker@manger:~$ docker service ls
+ID                  NAME                MODE                REPLICAS            IMAGE               PORTS
+khw3av021hlx        nginx               replicated          3/3                 nginx:latest        *:80->80/tcp
+docker@manger:~$			
+
+使用 docker service ps 来查看某个服务的详情。
+
+docker@manger:~$ docker service ps nginx
+ID                  NAME                IMAGE               NODE                DESIRED STATE       CURRENT STATE             ERROR                   PORTS
+6b900c649xyp        nginx.1             nginx:latest        worker1             Running             Running 5 minutes                                       
+n55uhpjdurxs        nginx.2             nginx:latest        worker2             Running             Running 5 minutes ago                                   
+l2uiyggbegsf        nginx.3             nginx:latest        manger              Running             Running 5 minutes ago                                   
+docker@manger:~$	
+
+使用 docker service logs 来查看某个服务的日志：
+
+docker@manger:~$ docker service logs nginx
+
+
+服务伸缩：
+可以使用 docker service scale 对一个服务运行的容器数量进行伸缩
+
+当业务处于高峰期时，我们需要扩展服务运行的容器数量
+
+$ docker service scale nginx=5
+
+当业务平稳时，我们需要减少服务运行的容器数量
+
+$ docker service scale nginx=2
+
+删除服务:
+使用 docker service rm 来从 Swarm 集群移除某个服务。
+
+$ docker service rm nginx
