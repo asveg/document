@@ -1,3 +1,1 @@
-# document
-study
-word hard
+书到用时方恨少，事非经过不知难！！！
