@@ -1,0 +1,103 @@
+git 详解标签管理之四
+
+1.创建标签
+标签可以简单的理解为属于分支定义的别名，分支本身都会进行指针的配置（分支都会指向某一个commit id）, 但是标签却是一个固定的内容，可以说，标签永远指向一个commit id。
+
+标签定义
+标签可以标记某一提交点
+
+1）为master定义一个标签
+git tag v1.0
+
+2）查看所有的标签
+git tag
+[root@node7 ~]# git tag
+v1.0
+
+但是这个标签也只是针对当前的master 分支所打上的标签，可是在一个项目中一定会有许多的提交点，如果要为之前的提交点打上标签该怎么做呢？只需要找到 commit id 即可。
+
+3）查询日志
+git log --pretty=oneline --abbrev-commit
+[root@node7 ~]# git log --pretty=oneline --abbrev-commit
+6e058cc add file
+ee9a35e add test
+f076818 Add LICENSE
+8e24f3c Initial commit
+
+在这些日志上都会有 commit id,那么下面针对于一个commit id 进行标签的定义。
+
+4）为ee9a35e设置标签
+git tag v0.1 ee9a35e
+
+查看标签
+[root@node7 ~]# git tag
+v0.1
+v1.0
+
+但此时只是显示一些很简单的标签信息并不是很好，所以下面希望可以看标签的完整内容。
+
+5）查看标签的完整信息
+git show v0.1
+[root@node7 ~]# git show v0.1
+commit ee9a35eef2660e0714ee7253a2b63826ca2cc2ee
+Author: wangjinhuai <wang_jinghuai@163.com>
+Date:   Sat Jul 20 10:30:40 2019 -0400
+
+    add test
+
+diff --git a/test.txt b/test.txt
+new file mode 100644
+index 0000000..8cced05
+--- /dev/null
++++ b/test.txt
+@@ -0,0 +1 @@
++This is Test txt - Accommate
+
+在之前所建立的标签实际上都没有设置注释信息，那么下面可以定义一些注释信息。
+
+6）添加标签时设置注释
+git tag -a v0.7 -m "test version" 6e058cc
+
+查询标签信息
+[root@node7 ~]# git show v0.7
+tag v0.7
+Tagger: wangjinhuai <wang_jinhuai@163.com>
+Date:   Sat Jul 20 22:09:48 2019 -0400
+
+test version
+
+commit 6e058ccf28764c52938aea7b44747351f58fc091
+Author: wangjinhuai <wang_jinhuai@163.com>
+Date:   Sat Jul 20 22:38:04 2019 +0800
+
+    add file
+
+diff --git a/file.txt b/file.txt
+new file mode 100644
+index 0000000..1c3a655
+--- /dev/null
++++ b/file.txt
+@@ -0,0 +1 @@
++This is Test txt - test
+
+2.标签管理
+
+1）删除标签
+ git tag -d v1.0
+
+这样的标签只是进行了本地的标签删除，而标签也可以提交到服务器上去。
+
+2）将标签推送到服务器上
+git push origin v0.1
+git push origin v0.7
+
+推送完成之后，可以登录到web界面进行标签的查看，发现多了两个tag在仓库中。
+
+3）一次性推送多个标签
+git push origin --tags
+
+4）删除本地某个标签
+git tag -d v0.7 
+
+5）但是此时在服务器上依然存在此标签，所以用于删除远程服务器标签
+git push origin :refs/tags/v0.7
