@@ -1,0 +1,168 @@
+
+CentOS7搭建本地YUM仓库，并定期同步阿里云源
+
+搭建环境：
+centos镜像仓库：192.168.170.22
+客户端：172.16.4.140
+
+1、在centos镜像仓库安装需要依赖的软件，配置nginx
+# yum -y install prce zlib openssl nginx rsync
+
+创建根目录
+# mkdir -p /home/home/mirror/epel/7
+
+修改配置文件
+# vi /etc/nginx/nginx.conf #增加如下配置
+server {
+    listen       80;
+    server_name  localhost;
+    root    /home/mirror;
+    location / {    
+            autoindex on;
+            autoindex_exact_size off;
+            autoindex_localtime on;
+    }
+
+}
+启动服务
+# systemctl start nginx
+
+2、修改yum源为阿里云源
+
+备份系统自带的yum源
+# tar -zcvf CentOS-bk.tar.gz /etc/yum.repos.d/CentOS-*
+
+修改yum源
+# wget -O /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-7.repo
+# wget -O /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-7.repo
+或者
+# curl -o /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-7.repo
+# curl -o /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-7.repo
+
+
+检验阿里云源是否正常
+# yum repolist
+
+安装相关软件
+# yum install -y wget make cmake gcc gcc-c++ pcre-devel zlib-devel openssl openssl-devel createrepo yum-utils
+
+yum-utils：reposync同步工具
+createrepo：编辑yum库工具
+plugin-priorities：控制yum源更新优先级工具，这个工具可以用来控制进行yum源检索的先后顺序，建议可以用在client端。
+
+注：由于很多人喜欢最小化安装，上边软件是一些常用环境。
+
+3、根据源标识同步源到本地目录
+
+创建本地目录
+# mkdir /home/mirror
+
+同步到本地目录
+# reposync -p /home/mirror
+
+注：不用担心没有创建相关目录，系统自动创建相关目录，并下载，时间较长请耐心等待。
+
+可以用  repo -r --repoid=repoid指定要查询的repo id，可以指定多个（# reposync -r base -p /mirror     #这里同步base目录到本地）
+
+更新新的rpm包
+# reposync -np /home/mirror
+
+注：时间同样较长，请耐心等待。
+
+创建索引
+# createrepo -po /home/mirror/base/ /home/mirror/base/
+# createrepo -po /home/mirror/extras/ /home/mirror/extras/
+# createrepo -po /home/mirror/updates/ /home/mirror/updates/
+# createrepo -po /home/mirror/epel/ /home/mirror/epel/
+
+
+更新源数据
+# createrepo --update /home/mirror/base
+# createrepo --update /home/mirror/extras
+# createrepo --update /home/mirror/updates
+# createrepo --update /home/mirror/epel
+
+创建定时任务脚本
+# vi /root/centos_yum_update.sh
+#!/bin/bash
+echo 'Updating Aliyum Source'
+DATETIME=`date +%F_%T`
+exec > /var/log/aliyumrepo_$DATETIME.log
+     reposync -np /mirror
+if [ $? -eq 0 ];then
+      createrepo --update /home/mirror/base
+      createrepo --update /home/mirror/extras
+      createrepo --update /home/mirror/updates
+      createrepo --update /home/mirror/epel
+    echo "SUCESS: $DATETIME aliyum_yum update successful"
+  else
+    echo "ERROR: $DATETIME aliyum_yum update failed"
+fi
+
+4、客户端配置
+
+首先update一下原来的系统，证明原来的系统有软件源，而且是可以用的
+[root@bboysoul etc]# yum update
+已加载插件：fastestmirror
+base                                                     | 3.6 kB     00:00     
+extras                                                   | 3.4 kB     00:00     
+updates                                                  | 3.4 kB     00:00     
+extras/7/x86_64/primary_db                                 | 191 kB   00:00     
+Loading mirror speeds from cached hostfile
+ * base: mirrors.zju.edu.cn
+ * extras: mirrors.zju.edu.cn
+ * updates: centos.ustc.edu.cn
+No packages marked for update
+
+接着备份一下原来客户端的软件源
+[root@bboysoul etc]# cp -rf yum.repos.d/ /root
+[root@bboysoul etc]# ls /root/yum.repos.d/
+CentOS-Base.repo  CentOS-Debuginfo.repo  CentOS-Media.repo    CentOS-Vault.repo
+CentOS-CR.repo    CentOS-fasttrack.repo  CentOS-Sources.repo
+
+删除原来的所有软件源
+[root@bboysoul etc]# rm -rf yum.repos.d/
+[root@bboysoul etc]# mkdir yum.repos.d
+
+在客户端修改yum源，并指向本地搭建的yum源主机。
+# vim CentOS7-Base.repo
+[base]
+name=CentOS-$releasever - Base - mirror.template.com
+baseurl=http://192.168.170.22/base/
+path=/
+enabled=1
+gpgcheck=0
+
+[updates]
+name=CentOS-$releasever - Updates - mirror.template.com
+baseurl=http://192.168.170.22/updates/
+path=/
+enabled=1
+gpgcheck=0
+
+[extras]
+name=CentOS-$releasever - Extras - mirrors.template.com
+baseurl=http://192.168.170.22/extras/
+path=/
+enabled=1
+gpgcheck=0
+
+[epel]
+name=CentOS-$releasever - epel - mirrors.template.com
+baseurl=http://192.168.170.22/epel/
+failovermethod=priority
+enabled=1
+gpgcheck=0
+
+接着清理原来的缓存再建立新的缓存
+yum clean all
+
+之后安装一个软件包试试
+[root@bboysoul yum.repos.d]# yum install htop
+
+5、将脚本加入到yum本地仓库定时任务中
+
+# crontab -e
+# Updating Aliyum Source
+00 13 * * 6 [ $(date +%d) -eq $(cal | awk 'NR==3{print $NF}') ] && /bin/bash /root/centos_yum_update.sh
+#每月第一个周六的13点更新阿里云yum源
