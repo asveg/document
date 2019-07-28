@@ -1,0 +1,306 @@
+kubeadm安装部署K8S集群
+
+1、kubernetes安装介绍
+
+1.3 安装kubernetes方法
+1.3.1 方法1：使用kubeadm 安装kubernetes
+ 优点：你只要安装kubeadm即可；kubeadm会帮你自动部署安装K8S集群；如：初始化K8S集群、配置各个插件的证书认证、部署集群网络等。安装简易。
+ 缺点：不是自己一步一步安装，可能对K8S的理解不会那么深；并且有那一部分有问题，自己不好修正。
+ 
+
+1.3.2 方法2：二进制安装部署
+ 优点：K8S集群所有东西，都由自己一手安装搭建；清晰明了，更加深刻细节的掌握K8S；哪里出错便于快速查找验证。
+ 缺点：安装较为繁琐麻烦，且易于出错。
+ 
+
+2、安装kubernetes先决条件
+2.1 组件版本
+ docker 17.03.2
+ kubeadm 1.11.1
+ kubelet 1.11.1
+ kubectl 1.11.1
+ 
+
+2.2 集群机器
+ kube-master：192.168.10.103
+ kube-node1：192.168.10.104
+ kube-node2：192.168.10.105
+ 
+
+2.3 主机名
+1、设置永久主机名称，然后重新登录
+$ sudo hostnamectl set-hostname master
+$ sudo hostnamectl set-hostname node1
+$ sudo hostnamectl set-hostname node2
+　　
+
+2、修改 /etc/hostname  文件，添加主机名和 IP 的对应关系：
+$ vim /etc/hosts
+192.168.10.103 master
+192.168.10.104 node1
+192.168.10.105 node2
+　　
+
+2.4 同步系统时间
+$ yum -y install ntpdate
+$ sudo ntpdate cn.pool.ntp.org
+　　
+
+2.5 关闭防火墙
+在每台机器上关闭防火墙：
+
+① 关闭服务，并设为开机不自启
+$ sudo systemctl stop firewalld
+$ sudo systemctl disable firewalld
+
+② 清空防火墙规则
+$ sudo iptables -F && sudo iptables -X && sudo iptables -F -t nat && sudo iptables -X -t nat
+$ sudo iptables -P FORWARD ACCEPT
+　　
+
+2.6 关闭 swap 分区
+1、如果开启了 swap 分区，kubelet 会启动失败(可以通过将参数 --fail-swap-on 设置为false 来忽略 swap on)，故需要在每台机器上关闭 swap 分区：
+$ sudo swapoff -a
+　　
+
+2、为了防止开机自动挂载 swap 分区，可以注释  /etc/fstab  中相应的条目：
+$ sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+　　
+
+2.7 关闭 SELinux
+1、关闭 SELinux，否则后续 K8S 挂载目录时可能报错  Permission denied  ：
+$ sudo setenforce 0
+　　
+
+2、修改配置文件，永久生效；
+
+$ vim /etc/selinux/config
+SELINUX=disabled
+　　
+
+3、使用kubeadm安装K8S集群
+3.1 认识kubeadm
+ gitlab项目地址：https://github.com/kubernetes/kubeadm
+ kubeadm 幕后发生的工作内容：https://github.com/kubernetes/kubeadm/blob/master/docs/design/design_v1.10.md
+以下操作在3个服务器上，都要执行！
+
+ 
+
+3.2 配置安装源
+3.2.1 配置docker-ce 源信息
+（1）添加docker-ce 源信息
+[root@master ~]# wget -O /etc/yum.repos.d/docker-ce.repo https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/centos/docker-ce.repo
+　　
+（2）修改docker-ce 源
+[root@master ~]# sed -i 's@download.docker.com@mirrors.tuna.tsinghua.edu.cn/docker-ce@g' /etc/yum.repos.d/docker-ce.repo
+　　
+3.2.2 配置kubernetes仓库
+[root@node2 ~]# cd /etc/yum.repos.d/
+[root@master yum.repos.d]# vim kubernetes.repo
+[kubernetes]
+name=Kubernetes Repo
+baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-x86_64/
+gpgcheck=0
+enable=1
+　　
+
+3.2.3 更新yum仓库
+[root@master yum.repos.d]# yum clean all
+[root@master yum.repos.d]# yum repolist
+repo id                         repo name                                                    status
+base                                    base                                                                                          9,363
+docker-ce-stable/x86_64         Docker CE Stable - x86_64                                     20
+epel/x86_64                     Extra Packages for Enterprise Linux 7 - x86_64                12,663
+kubernetes                      Kubernetes Repo                                               246
+repolist: 22,292
+　　
+
+3.3 安装docker、kubelet、kubeadm、kubectl
+ kubelet：负责管理pods和它们上面的容器，维护容器的生命周期
+ kubeadm：安装K8S工具
+ kubectl：K8S命令行工具
+（1）安装
+[root@master ~]# yum -y install docker-ce  下载稳定版本
+[root@master ~]# yum -y install kubeadm-1.11.1 kubelet-1.11.1 kubectl-1.11.1
+　　
+
+3.4 启动服务
+3.4.1 配置启动docker服务
+（1）添加加速器到配置文件
+[root@master ~]# mkdir -p /etc/docker
+[root@master ~]# tee /etc/docker/daemon.json <<-'EOF'
+{
+  "registry-mirrors": ["https://registry.docker-cn.com"]
+}
+EOF
+
+（2）启动服务
+[root@master ~]# systemctl daemon-reload
+[root@master ~]# systemctl start docker
+[root@master ~]# systemctl enable docker.service
+
+（3）打开iptables内生的桥接相关功能，已经默认开启了，没开启的自行开启
+[root@node1 ~]# cat /proc/sys/net/bridge/bridge-nf-call-ip6tables
+1
+[root@node1 ~]# cat /proc/sys/net/bridge/bridge-nf-call-iptables
+1
+
+3.4.2 配置启动kubelet服务
+（1）修改配置文件
+[root@master ~]# vim /etc/sysconfig/kubelet
+KUBELET_EXTRA_ARGS="--fail-swap-on=false"
+KUBE_PROXY=MODE=ipvs
+　　
+
+（2）先设为开机自启
+
+[root@master ~]# systemctl enable kubelet.service
+因为K8S集群还未初始化，所以kubelet 服务启动不成功，下面初始化完成，再启动即可。
+
+
+4、初始化kubernetes master节点
+在master服务器上执行，完成以下所有操作
+
+4.1 使用kubeadm init初始化
+（1）使用kubeadm init 进行初始化（需要进行很多操作，所以要等待一段时间）
+
+[root@master ~]# kubeadm init --kubernetes-version=v1.11.1 --pod-network-cidr=10.244.0.0/16 --service-cidr=10.96.0.0/12 --ignore-preflight-errors=Swap
+释：
+ --kubernetes-version：指定kubeadm版本；我这里下载的时候kubeadm最高时1.11.1版本
+ --pod-network-cidr：指定pod所属网络
+ --service-cidr：指定service网段
+ --ignore-preflight-errors=Swap/all：忽略 swap/所有 报错
+注：
+
+　　因为kubeadm需要拉取必要的镜像，这些镜像需要“***”；所以可以先在docker hub或其他镜像仓库拉取kube-proxy、kube-scheduler、kube-apiserver、kube-controller-manager、etcd、pause镜像；并加上 --ignore-preflight-errors=all 忽略所有报错即可。
+
+ 
+
+（2）下载镜像
+
+我已经将我下载的镜像导出，放入我的网盘，有需要的打赏一杯咖啡钱，私聊博主；博主会很快恢复的；
+[root@master ~]# docker image load -i kube-apiserver-amd64.tar.gz
+[root@master ~]# docker image load -i kube-proxy-amd64.tar.gz
+[root@master ~]# docker image load -i kube-controller-manager-amd64.tar.gz
+[root@master ~]# docker image load -i kube-scheduler-amd64.tar.gz
+[root@master ~]# docker image load -i etcd-amd64.tar.gz
+[root@master ~]# docker image load -i pause.tar.gz
+　　
+
+（3）初始化命令成功后，创建.kube目录
+
+[root@master ~]# mkdir -p $HOME/.kube
+[root@master ~]# cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+　　
+
+4.2 验证
+（1）拉取了必须的镜像
+[root@master ~]# docker image ls
+REPOSITORY                                          TAG                 IMAGE ID            CREATED             SIZE
+k8s.gcr.io/kube-proxy-amd64                         v1.11.1             d5c25579d0ff        6 months ago        97.8 MB
+k8s.gcr.io/kube-scheduler-amd64                     v1.11.1             272b3a60cd68        6 months ago        56.8 MB
+k8s.gcr.io/kube-apiserver-amd64                     v1.11.1             816332bd9d11        6 months ago        187 MB
+k8s.gcr.io/kube-controller-manager-amd64            v1.11.1             52096ee87d0e        6 months ago        155 MB
+k8s.gcr.io/etcd-amd64                               3.2.18              b8df3b177be2        9 months ago        219 MB
+k8s.gcr.io/pause                                    3.1                 da86e6ba6ca1        13 months ago       742 kB
+　　
+
+（2）开启了kube-apiserver 的6443端口
+
+[root@master ~]# ss -nutlp
+tcp   LISTEN     0      128                   :::6443                              :::*                   users:(("kube-apiserver",pid=1609,fd=3))
+　　
+
+（3）使用kubectl命令查询集群信息
+
+查询组件状态信息
+[root@master ~]# kubectl get cs
+NAME                 STATUS    MESSAGE              ERROR
+controller-manager   Healthy   ok                  
+scheduler            Healthy   ok                  
+etcd-0               Healthy   {"health": "true"}
+查询集群节点信息（因为还没有部署好flannel，所以节点显示为NotReady）
+[root@master ~]# kubectl get nodes
+NAME      STATUS    ROLES     AGE       VERSION
+master    NotReady  master    13m       v1.11.1
+查询名称空间，默认
+[root@master ~]# kubectl get ns
+NAME            STATUS    AGE
+default         Active    13m
+kube-public     Active    13m
+kube-system     Active    13m
+　　
+
+4.3 部署网络插件flannel
+（1）直接使用kubectl 执行gitlab上的flannel 部署文件
+[root@master ~]# kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+clusterrole.rbac.authorization.k8s.io/flannel created
+clusterrolebinding.rbac.authorization.k8s.io/flannel created
+serviceaccount/flannel created
+configmap/kube-flannel-cfg created
+daemonset.extensions/kube-flannel-ds-amd64 created
+daemonset.extensions/kube-flannel-ds-arm64 created
+daemonset.extensions/kube-flannel-ds-arm created
+daemonset.extensions/kube-flannel-ds-ppc64le created
+daemonset.extensions/kube-flannel-ds-s390x created
+　　
+
+（2）会看到下载好的flannel 的镜像
+
+[root@master ~]# docker image ls |grep flannel
+quay.io/coreos/flannel                              v0.10.0-amd64       f0fad859c909        12 months ago       44.6 MB
+quay.io/coreos/flannel                              v0.9.1              2b736d06ca4c        14 months ago       51.3 MB
+　　
+
+（3）验证
+
+① master 节点已经Ready
+[root@master ~]# kubectl get nodes
+NAME      STATUS    ROLES     AGE       VERSION
+master    Ready     master    14m       v1.11.1
+② 查询kube-system名称空间下
+
+[root@master ~]# kubectl get pods -n kube-system(指定名称空间) |grep flannel
+NAME                             READY     STATUS    RESTARTS   AGE
+kube-flannel-ds-amd64-4wck2      1/1       Running   0          1m
+　　
+
+5、初始化kubernetes node节点
+在2个node 服务器上执行，完成以下所有操作
+
+5.1 使用kubeadm join 初始化
+（1）初始化node节点；下边的命令是master初始化完成后，下边有提示的操作命令
+[root@node1 ~]# kubeadm join 192.168.10.103:6443 --token t56pjr.cm898tj09xm9pkqz --discovery-token-ca-cert-hash sha256:3ffe1c840e8a4b334fc2cc3d976b0e3635410e52e3653bb39585b8b557f81bc4 --ignore-preflight-errors=Swap
+　　
+
+（2）从节点如果不能“***”，只需从本地上传2个镜像即可；还是我网盘中的镜像
+[root@node1 ~]# docker image load -i kube-proxy-amd64.tar.gz
+[root@node1 ~]# docker image load -i pause.tar.gz
+　　
+
+5.2 验证集群是否初始化成功
+（1）查询2个节点的镜像
+[root@node1 ~]# docker image ls  
+REPOSITORY                    TAG                 IMAGE ID            CREATED             SIZE
+k8s.gcr.io/kube-proxy-amd64   v1.11.1             d5c25579d0ff        6 weeks ago         97.8 MB
+quay.io/coreos/flannel        v0.10.0-amd64       f0fad859c909        7 months ago        44.6 MB
+k8s.gcr.io/pause              3.1                 da86e6ba6ca1        8 months ago        742 kB
+　　
+
+（2）等2个从节点上下载好镜像，初始化完成，再在主上查询验证
+
+[root@master ~]# kubectl get nodes
+NAME      STATUS    ROLES     AGE       VERSION
+master    Ready     master    28m       v1.11.1
+node1     Ready     <none>    7m        v1.11.1
+node2     Ready     <none>    2m        v1.11.1
+　　
+
+（3）在主节点查询kube-system名称空间下关于node节点pod的信息
+
+[root@master ~]# kubectl get pods -n kube-system -o wide |grep node
+kube-flannel-ds-amd64-fcm9x             1/1       Running   15         91d       192.168.130.105   node2
+kube-flannel-ds-amd64-hzkp7             1/1       Running   17         91d       192.168.130.104   node1
+kube-proxy-f2kkn                        1/1       Running   34         139d      192.168.130.104   node1
+kube-proxy-kkqln                        1/1       Running   35         139d      192.168.130.105   node2
+

@@ -1,0 +1,959 @@
+kubernetes系列05—kubectl应用快速入门
+
+
+1、使用kubectl
+1.1 介绍
+kubectl用于运行Kubernetes集群命令的管理工具。
+
+1.2 语法
+
+kubectl [command] [TYPE] [NAME] [flags]
+ command：指定要在一个或多个资源执行的操作，例如操作create，get，describe，delete。TYPE：指定资源类型Resource types。
+ Name区分大小写，如果省略Name，则显示所有资源的详细信息，例如：$ kubectl get pods。
+ 
+
+1.3 选项
+Operation：Description
+  Syntax
+
+annotate：为一个或多个资源添加注释
+  kubectl annotate (-f FILENAME | TYPE NAME | TYPE/NAME) KEY_1=VAL_1 ... KEY_N=VAL_N [--overwrite] [--all] [--resource-version=version] [flags]
+
+api-versions：列出支持的API版本。
+  kubectl api-versions [flags]
+
+apply：对文件或stdin的资源进行配置更改。
+  kubectl apply -f FILENAME [flags]
+
+attach：连接到一个运行的容器，既可以查看output stream，也可以与容器(stdin)进行交互。
+  kubectl attach POD -c CONTAINER [-i] [-t] [flags]
+
+autoscale：自动扩容/缩容由replication controller管理的一组pod。
+  kubectl autoscale (-f FILENAME | TYPE NAME | TYPE/NAME) [--min=MINPODS] --max=MAXPODS [--cpu-percent=CPU] [flags]
+
+cluster-info：显示有关集群中master和services的终端信息。
+  kubectl cluster-info [flags]
+
+config：修改kubeconfig文件。有关详细信息，请参阅各个子命令。
+  kubectl config SUBCOMMAND [flags]
+
+create：从file或stdin创建一个或多个资源。
+  kubectl create -f FILENAME [flags]
+
+delete：从file，stdin或指定label选择器，names，resource选择器或resources中删除resources。
+  kubectl delete (-f FILENAME | TYPE [NAME | /NAME | -l label | --all]) [flags]
+
+describe:显示一个或多个resources的详细状态。
+  kubectl describe (-f FILENAME | TYPE [NAME_PREFIX | /NAME | -l label]) [flags]
+
+edit：使用默认编辑器编辑和更新服务器上一个或多个定义的资源。
+  kubectl edit (-f FILENAME | TYPE NAME | TYPE/NAME) [flags]
+
+exec：对pod中的容器执行命令。
+  kubectl exec POD [-c CONTAINER] [-i] [-t] [flags] [-- COMMAND [args...]]
+
+explain：获取各种资源的文档。例如pod，node，services等
+  kubectl explain [--include-extended-apis=true] [--recursive=false] [flags]
+
+expose：将replication controller，service或pod作为一个新的Kubernetes service显示。
+  kubectl expose (-f FILENAME | TYPE NAME | TYPE/NAME) [--port=port] [--protocol=TCP|UDP] [--target-port=number-or-name] [--name=name] [----external-ip=external-ip-of-service] [--type=type] [flags]
+
+get：列出一个或多个资源。
+  kubectl get (-f FILENAME | TYPE [NAME | /NAME | -l label]) [--watch] [--sort-by=FIELD] [[-o | --output]=OUTPUT_FORMAT] [flags]
+
+label：添加或更新一个或多个资源的flags。
+  kubectl label (-f FILENAME | TYPE NAME | TYPE/NAME) KEY_1=VAL_1 ... KEY_N=VAL_N [--overwrite] [--all] [--resource-version=version] [flags]
+
+logs：在pod中打印容器的日志。
+  kubectl logs POD [-c CONTAINER] [--follow] [flags]
+
+patch：使用strategic merge 补丁程序更新资源的一个或多个字段。
+  kubectl patch (-f FILENAME | TYPE NAME | TYPE/NAME) --patch PATCH [flags]
+
+port-forward：将一个或多个本地端口转发到pod。
+  kubectl port-forward POD [LOCAL_PORT:]REMOTE_PORT [...[LOCAL_PORT_N:]REMOTE_PORT_N] [flags]
+
+proxy：在Kubernetes API服务器运行代理。
+  kubectl proxy [--port=PORT] [--www=static-dir] [--www-prefix=prefix] [--api-prefix=prefix] [flags]
+
+replace从file或stdin替换资源。
+  kubectl replace -f FILENAME
+
+rolling-update：通过逐步替换指定的replication controller及其pod来执行滚动更新。
+  kubectl rolling-update OLD_CONTROLLER_NAME ([NEW_CONTROLLER_NAME] --image=NEW_CONTAINER_IMAGE | -f NEW_CONTROLLER_SPEC) [flags]
+
+run：在集群上运行指定的镜像。
+  kubectl run NAME --image=image [--env="key=value"] [--port=port] [--replicas=replicas] [--dry-run=bool] [--overrides=inline-json] [flags]
+
+scale：更新指定replication controller的大小。
+  kubectl scale (-f FILENAME | TYPE NAME | TYPE/NAME) --replicas=COUNT [--resource-version=version] [--current-replicas=count] [flags]
+
+stop：已弃用
+  kubectl stop
+
+version：显示客户端和服务器上运行的Kubernetes版本。
+  kubectl version [--client] [flags]
+
+1.4 示例演示
+（1）简单的查询操作
+
+查询节点详细信息
+
+[root@master ~]# kubectl describe node node1
+Name:               node1
+Roles:              <none>
+Labels:             beta.kubernetes.io/arch=amd64
+... ...
+
+查看版本
+
+[root@master ~]# kubectl version
+Client Version: version.Info{Major:"1", Minor:"11", GitVersion:"v1.11.1", GitCommit:"bb9ffb1654d4a729bb4cec18ff088eacc153c239", GitTreeState:"clean", BuildDate:"2018-08-07T23:17:28Z", GoVersion:"go1.10.3", Compiler:"gc", Platform:"linux/amd64"}
+Server Version: version.Info{Major:"1", Minor:"11", GitVersion:"v1.11.1", GitCommit:"b1b29978270dc22fecc592ac55d903350454310a", GitTreeState:"clean", BuildDate:"2018-07-17T18:43:26Z", GoVersion:"go1.10.3", Compiler:"gc", Platform:"linux/amd64"}
+
+
+查看集群信息
+t@master ~]# kubectl cluster-info
+Kubernetes master is running at https://192.168.10.103:6443
+KubeDNS is running at https://192.168.10.103:6443/api/v1/namespaces/kube-system/services/kube-dns:dns/proxy
+　　
+
+2、run运行
+2.1 介绍
+创建并运行一个或多个容器镜像。
+
+2.2 命令
+
+$ kubectl run NAME --image=image [--env="key=value"] [--port=port] [--replicas=replicas] [--dry-run=bool] [--overrides=inline-json] [--command] -- [COMMAND] [args...] [options]
+
+2.3 常用选项
+ --port：要暴露的端口
+ --replicas：期望创建几个Pod，默认1个
+ --dry-run：true为干跑
+ 
+
+2.4 演示
+（1）运行一个nginx的pod
+[root@master ~]# kubectl run nginx-deploy --image=nginx:1.14-alpine --port=80 --replicas=1
+ deployment.apps/nginx-deploy created
+　　
+
+（2）在master上查询验证
+[root@master ~]# kubectl get deployment
+NAME           DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+nginx-deploy   1         1         1            1           44s
+[root@master ~]# kubectl get pods
+NAME                          READY     STATUS    RESTARTS   AGE
+nginx-deploy-5b595999-6kw54   1/1       Running   0          51s
+[root@master ~]# kubectl get pods -o wide
+NAME                          READY     STATUS    RESTARTS   AGE       IP           NODE
+nginx-deploy-5b595999-6kw54   1/1       Running   0          1m        10.244.2.2   node2
+　　
+
+（3）在部署的node节点上查询
+[root@node2 ~]# ifconfig |head -2
+cni0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1450
+        inet 10.244.2.1  netmask 255.255.255.0  broadcast 0.0.0.0
+　　
+
+（4）访问pod内的nginx服务
+[root@node1 ~]# curl 10.244.2.2
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+　　
+
+3、delete删除
+3.1 介绍
+ 通过配置文件名、stdin、资源名称或label选择器来删除资源。
+ 支持JSON和YAML格式文件。可以只指定一种类型的参数：文件名、资源名称或label选择器。
+ 
+
+3.2 语法
+$ kubectl delete ([-f FILENAME] | TYPE [(NAME | -l label | --all)])
+　　
+
+3.3 演示
+删除刚才的pod，立刻会生成一个新的pod，因为此pod是控制器管理的
+
+[root@master ~]# kubectl delete pods nginx-deploy-5b595999-6kw54
+pod "nginx-deploy-5b595999-6kw54" deleted
+[root@master ~]# kubectl get pods
+NAME                          READY     STATUS              RESTARTS   AGE
+nginx-deploy-5b595999-jf5gm   0/1       ContainerCreating   0          16s
+[root@master ~]# kubectl get pods -o wide
+NAME                          READY     STATUS    RESTARTS   AGE       IP           NODE
+nginx-deploy-5b595999-jf5gm   1/1       Running   0          47s       10.244.1.2   node1
+　　
+
+4、expose暴露
+4.1 介绍
+ 将资源暴露为新的Kubernetes Service。
+ 指定deployment、service、replica set、replication controller或pod ，并使用该资源的选择器作为指定端口上新服务的选择器。deployment 或 replica set只有当其选择器可转换为service支持的选择器时，即当选择器仅包含matchLabels组件时才会作为暴露新的Service。
+ 资源包括(不区分大小写)：pod（po），service（svc），replication controller（rc），deployment（deploy），replica set（rs）
+ 
+
+4.2 语法
+$ kubectl expose (-f FILENAME | TYPE NAME) [--port=port] [--protocol=TCP|UDP] [--target-port=number-or-name] [--name=name] [--external-ip=external-ip-of-service] [--type=type]
+　　
+
+4.3 常用选项
+ --port：暴露在service上的端口
+ --target-port：容器中的端口
+ 
+
+4.4 演示
+（1）将nginx-deploy控制器中相关的Pod资源创建一个名为nginx的服务
+
+[root@master ~]# kubectl expose deployment nginx-deploy --name=nginx --port=80 --target-port=80 --protocol=TCP
+service/nginx exposed
+[root@master ~]# kubectl get services
+NAME         TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
+kubernetes   ClusterIP   10.96.0.1      <none>        443/TCP   16h
+nginx        ClusterIP   10.96.212.79   <none>        80/TCP    9s
+[root@master ~]# kubectl get svc  #简写
+NAME         TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
+kubernetes   ClusterIP   10.96.0.1      <none>        443/TCP   16h
+nginx        ClusterIP   10.96.212.79   <none>        80/TCP    13s
+　　
+
+（2）验证，在集群内部节点访问服务
+
+[root@master ~]# curl 10.96.212.79
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+　　
+
+（3）删除pod，立即生产新的pod，但是service还是不变，继续提供服务，只是指定到新的pod
+
+---删除pod
+[root@master ~]# kubectl delete pods nginx-deploy-5b595999-jf5gm
+---立即生产新的pod，service继续提供服务
+[root@master ~]# curl 10.96.212.79 
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+---指定到新的pod
+[root@master ~]# kubectl get pod -o wide
+NAME                            READY     STATUS    RESTARTS   AGE       IP            NODE
+nginx-deploy-5b595999-2z769     1/1       Running   0          29m       10.244.1.2    node2
+[root@master ~]# kubectl describe svc nginx
+Name:              nginx
+Namespace:         default
+Labels:            run=nginx-deploy
+Annotations:       <none>
+Selector:          run=nginx-deploy
+Type:              ClusterIP
+IP:                10.96.212.79
+Port:              <unset>  80/TCP
+TargetPort:        80/TCP
+Endpoints:         10.244.1.2:80
+Session Affinity:  None
+Events:            <none>
+　　
+
+5、scale动态扩容/缩容
+5.1 介绍
+ 扩容或缩容 Deployment、ReplicaSet、Replication Controller或 Job 中Pod数量。
+ scale也可以指定多个前提条件，如：当前副本数量或 --resource-version ，进行伸缩比例设置前，系统会先验证前提条件是否成立。
+ 
+
+5.2 语法
+$ kubectl scale [--resource-version=version] [--current-replicas=count] --replicas=COUNT (-f FILENAME | TYPE NAME)
+　　
+
+5.3 演示
+（1）先运行名为myapp标签选择器的2个pod，镜像是我用于测试演示自己构建的
+[root@master ~]# kubectl run myapp --image=ikubernetes/myapp:v1 --replicas=2
+deployment.apps/myapp created
+[root@master ~]# kubectl get deployment
+NAME      DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+myapp     2         2         2            2           6s
+[root@master ~]# kubectl get pods -o wide
+NAME                     READY     STATUS    RESTARTS   AGE       IP            NODE
+myapp-848b5b879b-58jcr   1/1       Running   0          11s       10.244.2.53   node2
+myapp-848b5b879b-wpx9v   1/1       Running   0          11s       10.244.1.56   node1
+　　
+
+（2）创建service，并验证
+[root@master ~]# kubectl expose deployment myapp --name=myapp --port=80
+service/myapp exposed
+[root@master ~]# kubectl get svc myapp
+NAME      TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)   AGE
+myapp     ClusterIP   10.104.205.158   <none>        80/TCP    8s
+[root@master ~]# curl 10.104.205.158
+Hello MyApp | Version: v1 | <a href="hostname.html">Pod Name</a>
+---因为有2个pod，所以是随机调度
+[root@master ~]# curl 10.104.205.158/hostname.html
+myapp-848b5b879b-58jcr
+[root@master ~]# curl 10.104.205.158/hostname.html
+myapp-848b5b879b-wpx9v
+　　
+
+（3）使用scale，将pod扩容到5个
+[root@master ~]# kubectl scale --replicas=5 deployment myapp
+deployment.extensions/myapp scaled
+[root@master ~]# kubectl get pods
+NAME                     READY     STATUS    RESTARTS   AGE
+myapp-848b5b879b-2sj8n   1/1       Running   0          8s
+myapp-848b5b879b-58jcr   1/1       Running   0          4m
+myapp-848b5b879b-hp7zs   1/1       Running   0          8s
+myapp-848b5b879b-sfq8r   1/1       Running   0          8s
+myapp-848b5b879b-wpx9v   1/1       Running   0          4m
+　　
+
+（4）使用scale，将pod缩容到3个
+[root@master ~]# kubectl scale --replicas=3 deployment myapp
+[root@master ~]# kubectl get pods
+NAME                     READY     STATUS    RESTARTS   AGE
+myapp-848b5b879b-2sj8n   1/1       Running   0          1m
+myapp-848b5b879b-58jcr   1/1       Running   0          6m
+myapp-848b5b879b-wpx9v   1/1       Running   0          6m
+　　
+
+6、set动态升级版本
+6.1 介绍
+（1）set
+
+ 配置应用资源。
+ 使用这些命令能帮你更改现有应用资源一些信息。
+ 子命令：image、resources、selector、subject
+ 
+
+（2）set image
+ 更新现有的资源对象的容器镜像。
+ 可使用资源对象包括（不区分大小写）：pod (po)、replicationcontroller (rc)、deployment (deploy)、daemonset (ds)、job、replicaset (rs)
+ 
+
+6.2 语法
+$ kubectl set image (-f FILENAME | TYPE NAME) CONTAINER_NAME_1=CONTAINER_IMAGE_1 ... CONTAINER_NAME_N=CONTAINER_IMAGE_N
+　　
+
+6.3 演示
+将镜像版本从v1升级到v2版
+[root@master ~]# kubectl set image deployment myapp myapp=ikubernetes/myapp:v2
+deployment.extensions/myapp image updated
+[root@master ~]# kubectl rollout status deployment myapp  #动态显示版本升级过程
+---因为版本升级，所以pod都是新建的，名字都改变了
+[root@master ~]# kubectl get pods
+NAME                          READY     STATUS    RESTARTS   AGE
+client                        1/1       Running   0          3h
+myapp-74c94dcb8c-d5fgk        1/1       Running   0          55s
+myapp-74c94dcb8c-f2ntn        1/1       Running   0          21s
+myapp-74c94dcb8c-ht9v7        1/1       Running   0          38s
+---验证，版本升级成功
+[root@master ~]# curl 10.104.205.158
+Hello MyApp | Version: v2 | <a href="hostname.html">Pod Name</a>
+　　
+
+7、rollout undo回滚版本
+7.1 介绍
+（1）rollout
+ 对资源进行管理
+ 可用资源包括：deployments、daemonsets
+ 子命令：history（查看历史版本）、pause（暂停资源）、resume（恢复暂停资源）、status（查看资源状态）、undo（回滚版本）
+ 
+（2）rollout undo
+回滚pod到之前的版本。
+
+7.2 语法
+$ kubectl rollout undo (TYPE NAME | TYPE/NAME) [flags]
+　　
+
+7.3 演示
+[root@master ~]# kubectl rollout undo deployment myapp
+deployment.extensions/myapp
+[root@master ~]# kubectl get pods
+NAME                     READY     STATUS    RESTARTS   AGE
+myapp-848b5b879b-gg9lr   1/1       Running   0          15s
+myapp-848b5b879b-km4t6   1/1       Running   0          16s
+myapp-848b5b879b-nq98c   1/1       Running   0          17s
+---验证，回滚成功
+[root@master ~]# curl 10.104.205.158
+Hello MyApp | Version: v1 | <a href="hostname.html">Pod Name</a>
+　　
+
+8、edit编辑修改
+
+8.1 介绍
+ 使用默认编辑器，编辑服务器上定义的资源。
+ 使用命令行工具获取的任何资源都可以使用edit命令编辑。edit命令会打开使用KUBE_EDITOR，GIT_EDITOR 或者EDITOR环境变量定义的编辑器，可以同时编辑多个资源，但所编辑过的资源只会一次性提交。edit除命令参数外还接受文件名形式。
+ 文件默认输出格式为YAML。要以JSON格式编辑，请指定“-o json”选项。
+ 如果在更新资源时报错，将会在磁盘上创建一个临时文件来记录。在更新资源时最常见的错误是几个用户同时使用编辑器更改服务器上资源，发生这种情况，你需要将你的更改应用到最新版本的资源上，或者更新保存的临时副本。
+ 
+
+8.2 语法
+$ kubectl edit (RESOURCE/NAME | -f FILENAME)
+　　
+
+8.3 演示
+（1）修改service，将类型type: ClusterIP，修改为type: NodePort；修改后，可以在集群外访问到pod中的服务
+[root@master ~]# kubectl edit svc myapp
+... ...
+spec:
+... ...
+  type: NodePort
+... ...
+service/myapp edited
+[root@master ~]# kubectl get svc myapp
+NAME      TYPE       CLUSTER-IP       EXTERNAL-IP   PORT(S)        AGE
+myapp     NodePort   10.104.205.158   <none>        80:31599/TCP   23m
+　　
+
+（2）在集群外的主机上访问了
+[root@master ~]# curl http://192.168.10.103:31599
+Hello MyApp | Version: v1 | <a href="hostname.html">Pod Name</a>
+
+9、label标签
+9.1 介绍
+更新（增加、修改或删除）资源上的 label（标签）。
+
+ label 必须以字母或数字开头，可以使用字母、数字、连字符、点和下划线，最长63个字符。
+ 如果--overwrite 为 true，则可以覆盖已有的 label，否则尝试覆盖 label 将会报错。
+ 如果指定了--resource-version，则更新将使用此资源版本，否则将使用现有的资源版本。
+ 
+
+9.2 语法
+$ kubectl label [--overwrite] (-f FILENAME | TYPE NAME) KEY_1=VAL_1 ... KEY_N=VAL_N [--resource-version=version]
+ 
+
+9.3 演示
+（1）运行一个标签为app=nginx的pod
+[root@master ~]# kubectl run nginx --image=nginx:1.14-alpine --replicas=1 --labels="app=nginx"
+deployment.apps/nginx created
+　　
+
+（2）-l 指定标签，实现标签过滤
+
+[root@master ~]# kubectl get pods --show-labels
+NAME                     READY     STATUS    RESTARTS   AGE       LABELS
+myapp-848b5b879b-5blnx   1/1       Running   0          4m        pod-template-hash=4046164356,run=myapp
+myapp-848b5b879b-6hgpp   1/1       Running   0          4m        pod-template-hash=4046164356,run=myapp
+myapp-848b5b879b-hzj5g   1/1       Running   0          4m        pod-template-hash=4046164356,run=myapp
+nginx-86d5b5ddb6-rwv2z   1/1       Running   0          53s       app=nginx,pod-template-hash=4281618862
+[root@master ~]# kubectl get pods --show-labels -l app
+NAME                     READY     STATUS    RESTARTS   AGE       LABELS
+nginx-86d5b5ddb6-rwv2z   1/1       Running   0          1m        app=nginx,pod-template-hash=4281618862
+　　
+
+（3）打一个新的标签
+[root@master ~]# kubectl label pods nginx-86d5b5ddb6-rwv2z release=canary
+pod/nginx-86d5b5ddb6-rwv2z labeled
+[root@master ~]# kubectl get pods --show-labels -l release
+NAME                     READY     STATUS    RESTARTS   AGE       LABELS
+nginx-86d5b5ddb6-rwv2z   1/1       Running   0          4m        app=nginx,pod-template-hash=4281618862,release=canary
+　　
+
+（4）修改标签
+[root@master ~]# kubectl label pods nginx-86d5b5ddb6-rwv2z release=stable --overwrite
+pod/nginx-86d5b5ddb6-rwv2z labeled
+[root@master ~]# kubectl get pods --show-labels -l release
+NAME                     READY     STATUS    RESTARTS   AGE       LABELS
+nginx-86d5b5ddb6-rwv2z   1/1       Running   0          5m        app=nginx,pod-template-hash=4281618862,release=stable
+　　
+
+9.4 标签选择器
+（1）等值关系：=，==，!=
+[root@master ~]# kubectl get pods -l release --show-labels
+NAME                     READY     STATUS    RESTARTS   AGE       LABELS
+nginx-86d5b5ddb6-rwv2z   1/1       Running   0          6m        app=nginx,pod-template-hash=4281618862,release=stable
+[root@master ~]# kubectl get pods -l release=stable --show-labels
+NAME                     READY     STATUS    RESTARTS   AGE       LABELS
+nginx-86d5b5ddb6-rwv2z   1/1       Running   0          6m        app=nginx,pod-template-hash=4281618862,release=stable
+[root@master ~]# kubectl get pods -l release!=stable --show-labels
+NAME                     READY     STATUS    RESTARTS   AGE       LABELS
+myapp-848b5b879b-5blnx   1/1       Running   0          10m       pod-template-hash=4046164356,run=myapp
+myapp-848b5b879b-6hgpp   1/1       Running   0          10m       pod-template-hash=4046164356,run=myapp
+myapp-848b5b879b-hzj5g   1/1       Running   0          10m       pod-template-hash=4046164356,run=myapp
+　　
+
+（2）集合关系
+
+ KEY in (VALUE1,VALUE2,...)：集合中存在此健
+ KEY notin (VALUE1,VALUE2,...)：集合中不存在此健
+ KEY：存在此健
+ !KEY：不存在此健
+[root@master ~]# kubectl get pods -l "release in (stable,beta,alpha)"
+NAME                     READY     STATUS    RESTARTS   AGE
+nginx-86d5b5ddb6-rwv2z   1/1       Running   0          9m
+[root@master ~]# kubectl get pods -l "release notin (stable,beta,alpha)"
+NAME                     READY     STATUS    RESTARTS   AGE
+myapp-848b5b879b-5blnx   1/1       Running   0          12m
+myapp-848b5b879b-6hgpp   1/1       Running   0          12m
+myapp-848b5b879b-hzj5g   1/1       Running   0          12m
+ 
+
+
+kubernetes系列06—kubernetes资源清单定义入门
+
+1、认识kubernetes资源
+1.1 常用资源/对象
+ workload工作负载型资源：pod，ReplicaSet,Deployment,StatefulSet，daemonset，job...
+ 服务器发现及均衡：Service，Lngress...
+ 配置与存储：volume，CSI
+    configmap，secret
+    downwardAPI
+ 集群级资源
+    namespace，node，role，clusterrole，rolebinding，clusterrolebinding
+ 元数据型资源
+    HPA，podtemplate，limitrange
+ 
+
+1.2 创建资源的方法
+ apiserver 仅接受JSON格式的资源定义；
+ yaml格式提供配置清单，apiserver 可自动将其转为JSON格式，而后再提交；
+ 
+
+1.3 大部分（主流）资源的配置清单：有5个一级字段组成
+apiserver：group/version
+  查询当前支持哪些apiserver：$ kubectl api-versions
+kind：资源类别
+metadata：元数据
+  name：名称
+  namespace：名称空间
+  labels：标签
+  annotation：资源注解
+  selfLink：每个资源的引用PATH，/api/GROUP/VERSION/namespaces/NAMESPACE/TYPE/NAME
+spec：期望的状态（disired state），期望资源应该用于什么特性
+status：当前状态（current state），本字段由kubernetes集群维护，用户不能自己定义
+ 
+
+1.4 使用kubectl explain查询每个资源如何配置
+（1）例如查询如何定义pod资源
+[root@master ~]# kubectl explain pod
+KIND:     Pod
+VERSION:  v1
+ 
+DESCRIPTION:
+     Pod is a collection of containers that can run on a host. This resource is
+     created by clients and scheduled onto hosts.
+ 
+FIELDS:
+   apiVersion   <string>
+... ...
+   kind <string>
+... ...
+ 
+   metadata <Object>
+... ...
+   spec <Object>
+... ...
+   status   <Object>
+... ...
+　　
+
+（2）能一级一级进入查询；如查询定义pod 的metadata字段
+[root@master ~]# kubectl explain pod.spec
+KIND:     Pod
+VERSION:  v1
+ 
+RESOURCE: spec <Object>
+ 
+DESCRIPTION:
+... ...
+ 
+FIELDS:
+... ..
+   affinity <Object>
+... ...
+[root@master ~]# kubectl explain pod.spec.containers
+KIND:     Pod
+VERSION:  v1
+ 
+RESOURCE: containers <[]Object>
+ 
+DESCRIPTION:
+... ...
+FIELDS:
+   args <[]string>
+... ...
+   command  <[]string>
+... ...  
+自己定义资源时，不清楚如何定义，可以进行快速的查询
+
+ 
+
+1.5 示例
+（1）查询集群中的pod（上篇创建的pod）
+[root@master ~]# kubectl get pods
+NAME                          READY     STATUS    RESTARTS   AGE
+client                        1/1       Running   0          4h
+myapp-848b5b879b-9slqg        1/1       Running   0          46m
+myapp-848b5b879b-wtrjr        1/1       Running   0          46m
+myapp-848b5b879b-z2sqc        1/1       Running   0          46m
+　　
+
+（2）-o yaml输出为yaml格式，查看pod创建的操作
+[root@master ~]# kubectl get pod myapp-848b5b879b-9slqg -o yaml
+apiVersion: v1  #api版本
+kind: Pod  #资源类别
+metadata:  #元数据
+  annotations:
+    cni.projectcalico.org/podIP: 10.244.1.60/32
+  labels:
+    pod-template-hash: "4046164356"
+    run: myapp
+  name: myapp-848b5b879b-9slqg
+  namespace: default
+... ...
+  selfLink: /api/v1/namespaces/default/pods/myapp-848b5b879b-9slqg
+spec:  #规格、规范；期望资源应该用于什么特性；期望目标状态
+... ...
+status:  #当前状态
+... ...
+　　
+
+1.6 演示：基于yaml格式文件，创建pod
+[root@master ~]# mkdir manifests
+[root@master ~]# cd manifests/
+ 
+
+（1）编写pod-demo.yaml文件
+
+创建2个容器，一个运行nginx；一个在busybox中执行sleep命令
+[root@master manifests]# vim pod-demo.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-demo
+  namespace: default
+  #labels: {app:myapp, tier:frontend} #映射可以写为{}形式;
+  labels: #也可以在下边分级写
+    app: myapp
+    tier: frontend
+spec:
+  containers:
+  - name: myapp
+    image: ikubernetes/myapp:v1
+  - name: busybox
+    image: busybox:latest
+    #command: ["/bin/sh","-c","sleep 3600"]  #列表可以写为[]形式;
+    command: #也可以在下边分级写,要加-
+    - "/bin/sh"
+    - "-c"
+    - "sleep 3600"
+　　
+
+（2）基于pod-demo.yaml 文件创建create pod
+[root@master manifests]# kubectl create -f pod-demo.yaml
+pod/pod-demo created
+　　
+
+（3）验证
+① 查询创建pod的信息
+[root@master manifests]# kubectl create -f pod-demo.yaml
+pod/pod-demo created
+[root@master manifests]# kubectl get pods -o wide
+NAME       READY     STATUS    RESTARTS   AGE       IP            NODE
+pod-demo   2/2       Running   0          1m        10.244.1.61   node1
+---查看详细信息
+[root@master manifests]# kubectl describe pods pod-demo
+Name:               pod-demo
+Namespace:          default
+... ...
+
+② 访问pod中的服务
+[root@master manifests]# curl 10.244.1.61
+Hello MyApp | Version: v1 | <a href="hostname.html">Pod Name</a>
+---查询pod产生的日志
+[root@master manifests]# kubectl logs pod-demo myapp
+192.168.130.104 - - [23/Jan/2019:05:35:35 +0000] "GET / HTTP/1.1" 200 65 "-" "curl/7.29.0" "-"
+③ 基于yaml文件删除pod
+[root@master manifests]# kubectl delete -f pod-demo.yaml
+pod "pod-demo" deleted
+[root@master manifests]# kubectl get pods
+No resources found.
+
+2、Pod资源
+
+2.1 Pod资源常用选项
+metadata.label：标签
+  key=value
+    key：字母、数字、_、-、.
+    value：可以为空，只能字母或数字开头及结尾，中间可使用字母、数字、_、-、.
+metadata.annotations：资源注解
+spec.containers <[]object>
+  - name：容器名称
+    image：镜像
+    imagePullPolicy：下载镜像规则，若镜像时latest标签，默认是Always；否则默认IfNotPresen
+      Always总是镜像，Never不下载镜像，IfNotPresent本地有则不下载
+  ports：从容器中公开的端口列表
+    containerPort：Pod中服务的端口号
+    hostIP：暴露绑定在主机哪个IP上
+    hostPort：暴露在主机的端口号
+    name：暴露这个端口的名称
+  args：参数
+  command：执行命令
+spec.nodeSelector：节点标签选择器
+ 
+
+2.2 演示
+（1）修改pod-demo.yaml文件
+[root@master manifests]# vim pod-demo.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-demo
+  namespace: default
+  #labels: {app:myapp, tier:frontend} #映射可以写为{}形式;
+  labels: #也可以在下边分级写
+    app: myapp
+    tier: frontend
+  annotations:
+    along.com/created-by: "cluster admin"
+spec:
+  containers:
+  - name: myapp
+    image: ikubernetes/myapp:v1
+    ports:
+    - name: http
+      containerPort: 80
+    - name: https
+      containerPort: 443
+  - name: busybox
+    image: busybox:latest
+    imagePullPolicy: IfNotPresent
+    #command: ["/bin/sh","-c","sleep 3600"]  #列表可以写为[]形式;
+    command: #也可以在下边分级写,要加-
+    - "/bin/sh"
+    - "-c"
+    - "sleep 3600"
+  nodeSelector:
+    disktype: ssd
+　　
+
+（2）将node1节点打上disktype=ssd的标签
+[root@master manifests]# kubectl label node node1 disktype=ssd
+[root@master manifests]# kubectl get nodes node1 --show-labels
+NAME      STATUS    ROLES     AGE       VERSION   LABELS
+node1     Ready     <none>    140d      v1.11.2   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,disktype=ssd,kubernetes.io/hostname=node1
+　　
+
+（3）基于yaml文件创建pod
+[root@master manifests]# kubectl create -f pod-demo.yaml
+pod/pod-demo created
+　　
+
+（4）验证
+--- pod只会创建到node1节点上，因为node1的disktype=ssd标签
+[root@master manifests]# kubectl get pod -o wide
+NAME       READY     STATUS    RESTARTS   AGE       IP            NODE
+pod-demo   2/2       Running   0          11s       10.244.1.68   node1
+--- -l 指定标签，实现标签过滤
+[root@master manifests]# kubectl get pods --show-labels -l app
+NAME       READY     STATUS    RESTARTS   AGE       LABELS
+pod-demo   2/2       Running   0          30s       app=myapp,tier=frontend
+　　
+
+3、Pod健康检测
+3.1 pod健康检测介绍
+pod健康检测分为存活性探测、 就绪型探测；这在生产环境几乎是必须配置的；
+如果没有就绪型探测；pod一启动就会被分配用户流量；若pod中的服务像tomcat等，需要时间启动；就会导致有一定时间，用户访问不到服务；
+如果没有存活性探测：pod中服务一旦失败，没有检测，不会将容器重启关闭；也会导致用户访问服务失败。
+
+3.2 pod健康检测选项
+（1）在spec字段下、containers字段配置，可使用explain查看详细用法
+
+$ kubectl explain pod.spec.containers.
+
+livenessProbe 存活性探测
+  exec：指定检测的命令
+  failureThreshold：连续失败次数被认为失败，默认为3，最小值为1
+  httpGet：指定要执行的http请求
+  initialDelaySeconds：在容器启动多少秒后再检测
+  periodSeconds：每隔多少秒探测一次；默认为10秒。最低限度值是1
+  successThreshold：连续成功次数认为服务正常
+  tcpSocket：定涉及TCP端口的操作
+  timeoutSeconds:探测超时的秒数，默认为1秒
+readinessProbe 就绪型探测（和livenessProbe 存活性探测选项一样）
+ 
+
+（2）pod中容器挂了，是否重启pod
+$ kubectl explain pod.spec.restartPolicy. 
+  Always：总是重启（默认）
+  OnFailure：只有容器状态为错误时，才重启
+  Never：绝不重启
+ 
+
+3.3 演示：exec方式实现存活性探测
+（1）编写yaml文件
+
+当探测到/tmp/healthy文件不存在时，认为服务故障；
+容器在30秒后执行删除/tmp/healthy文件
+[root@master manifests]# vim liveness-exec.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: liveness-exec-pod
+  namespace: default
+spec:
+  containers:
+  - name: liveness-exec-container
+    image: busybox:latest
+    imagePullPolicy: IfNotPresent
+    command: ["/bin/sh","-c","touch /tmp/healthy; sleep 30; rm -f /tmp/healthy; sleep 3600"]
+    livenessProbe:
+      exec:
+        command: ["test","-e","/tmp/healthy"]
+      initialDelaySeconds: 1  #在容器启动后1秒开始检测
+      periodSeconds: 3  #每隔3秒探测一次
+  restartPolicy: Always  #总是重启pod
+　　
+
+（2）创建运行pod
+[root@master manifests]# kubectl create -f liveness-exec.yaml
+pod/liveness-exec-pod created
+[root@master manifests]# kubectl get pods
+NAME                READY     STATUS        RESTARTS   AGE
+liveness-exec-pod   1/1       Running       0          6s
+　　
+
+（3）等30s，容器就会检测失败，重启pod；使用describe可以查看详细信息
+[root@master manifests]# kubectl describe pods liveness-exec-pod
+... ...
+    State:          Running
+      Started:      Wed, 23 Jan 2019 16:58:09 +0800
+    Last State:     Terminated  #上次状态为终止
+      Reason:       Error
+      Exit Code:    137
+      Started:      Wed, 23 Jan 2019 16:57:01 +0800
+      Finished:     Wed, 23 Jan 2019 16:58:09 +0800
+    Ready:          True
+    Restart Count:  1  #重启次数1次
+    Liveness:       exec [test -e /tmp/healthy] delay=1s timeout=1s period=3s #success=1 #failure=3
+... ...
+　　
+
+3.4 演示：httpget方式实现存活性探测
+（1）编写yaml文件，创建并运行pod
+
+当探测不到容器内80端口，和提供80端口的/index.html文件时，认为服务故障；
+[root@master manifests]# vim liveness-httpget.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: liveness-httpget-pod
+  namespace: default
+spec:
+  containers:
+  - name: liveness-httpget-pod
+    image: ikubernetes/myapp:v1
+    ports:
+    - name: http
+      containerPort: 80
+    livenessProbe:
+      httpGet:
+        port: http
+        path: /index.html
+      initialDelaySeconds: 1
+      periodSeconds: 3
+  restartPolicy: Always
+[root@master manifests]# kubectl create -f liveness-httpget.yaml
+pod/liveness-httpget-pod created
+　　
+
+（2）手动连入容器，删除index.html文件
+[root@master manifests]# kubectl exec -it liveness-httpget-pod -- /bin/sh
+/ # rm -f /usr/share/nginx/html/index.html
+　　
+
+（3）容器会检测失败，重启pod；使用describe可以查看详细信息
+[root@master manifests]# kubectl describe pods liveness-httpget-pod
+... ...
+    Port:           80/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Wed, 23 Jan 2019 17:10:03 +0800
+    Last State:     Terminated  #上次状态为终止
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Wed, 23 Jan 2019 17:08:22 +0800
+      Finished:     Wed, 23 Jan 2019 17:10:03 +0800
+    Ready:          True
+    Restart Count:  1  #重启次数1次
+    Liveness:       http-get http://:http/index.html delay=1s timeout=1s period=3s #success=1 #failure=3
+... ...
+　　
+
+3.5 演示：exec方式实现就绪性探测
+（1）编写yaml文件，创建启动容器
+
+当探测到/tmp/healthy文件不存在时，就认为服务就绪不成功；pod启动失败；
+[root@master manifests]# vim readiness-exec.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: readiness-exec-pod
+  namespace: default
+spec:
+  containers:
+  - name: readiness-exec-container
+    image: busybox:latest
+    imagePullPolicy: IfNotPresent
+    #command: ["/bin/sh","-c","touch /tmp/healthy; sleep 30; rm -f /tmp/healthy; sleep 3600"]
+    command: ["sleep 3600"]
+    readinessProbe:
+      exec:
+        command: ["test","-e","/tmp/healthy"]
+      periodSeconds: 3
+  restartPolicy: Always
+[root@master manifests]# kubectl create -f readiness-exec.yaml
+pod/readiness-exec-pod created
+　　
+
+（2）查看，pod启动就绪失败
+[root@master ~]# kubectl get pods
+NAME                 READY     STATUS              RESTARTS   AGE
+readiness-exec-pod   0/1       RunContainerError   1          12s
+　　
+
+4、Pod启动前/后钩子
+4.1 介绍
+ pod在启动前后都可以设置钩子hook；在spec.containers.lifecycle字段下设置；
+ postStart：创建容器后立即调用PostStart操作；如果失败，根据重启策略终止；
+ preStop：在容器终止之前立即调用PreStop操作，该容器在处理程序完成后终止
+ 
+
+4.2 语法
+$ kubectl explain pod.spec.containers.lifecycle
+postStart
+  exec：指定了要采取的命令；
+  httpGet：指定要执行的http请求;
+  tcpSocket：指定涉及TCP端口的操作
+preStop （和postStart命令一样）
+ 
+
+4.3 演示：使用exec设置pod启动前钩子
+（1）编写yaml文件，创建启动容器
+
+启动容器前，先创建准备一个httpd服务的主页面文件/tmp/index.html
+[root@master manifests]# vim poststart-pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: poststart-pod
+  namespace: default
+spec:
+  containers:
+  - name:  poststart-container
+    image: busybox:latest
+    imagePullPolicy: IfNotPresent
+    lifecycle:
+      postStart:
+        exec:
+          command: ['/bin/sh','-c','echo hello > /tmp/index.html']
+    command: ['/bin/sh','-c','/bin/httpd -f -h /tmp']
+[root@master manifests]# kubectl create -f poststart-pod.yaml
+pod/poststart-pod created
+　　
+
+（2）验证，访问服务
+[root@master ~]# kubectl get pods -o wide
+NAME            READY     STATUS    RESTARTS   AGE       IP            NODE
+poststart-pod   1/1       Running   0          26s       10.244.2.69   node2
+[root@master ~]# curl 10.244.2.69
+hello
