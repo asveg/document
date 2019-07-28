@@ -1,0 +1,2314 @@
+
+一、Pod控制器类别
+
+1.1 ReplicaSet
+ReplicaSet控制器用来管理无状态的Pod资源，核心作用在于代用户创建指定数量的Pod副本，并确保Pod副本数量一直等于用户期望的数量。而且还支持Pod滚动更新、及自动扩缩容等机制；它被称新一代的ReplicationCtroller。
+ReplicaSet主要有三个组件组成：
+	用户期望的Pod副本数量；
+	标签选择器，用来选定由自己管理或控制的Pod副本，如果通过标签选择器挑选到的Pod少于定义的Pod副本数量，则会利用Pod资源模版来创建Pod副本，以达到规定的Pod数量；
+	Pod资源模版；
+
+但是Kubernetes却不建议用户直接使用ReplicaSet，而是应该使用Deployment。
+
+1.2 Deployment
+Deployment也是Pod控制器，但是它是工作在ReplicaSet之上的。Deployment是通过控制ReplicaSet来控制Pod。Deployment能够提供比ReplicaSet更为强大的功能。比如：Pod版本回滚、声明式配置（声明式配置是已经创建的Pod可以随时更改配置并应用到Pod）。Deployment是目前管理无状态应用最好的控制器。
+
+1.3 DaemonSet
+DaemonSet用于确保集群中的每一个节点只运行一个特定的Pod副本，这种特定的Pod通常是用来实现系统级的后台任务。把这样的任务托管在Kubernetes之上的好处是：如果这个后台任务宕了以后，会由DaemonSet控制器自动重建一个Pod；新建一个Node节点，它也会在新节点上创建一个这样的Pod运行。
+约束：我们也可以根据自己的需求，在K8S群集中的部分满足条件的节点上仅运行一个Pod副本。
+
+总结： Deployment和DaemonSet管理的Pod中运行的服务都是无状态的，且是守护进程类的（必须始终持续运行在后台）。但是对于那种只希望运行一次就结束的任务，显然以上两种控制器是不能够使用的。例如：我们需要对数据库进行备份，备份结束后，任务就应该结束了，而不是让任务持续运行在后台。那么对于这种任务只运行一次，只要任务完成就正常退出，没有完成才会重建，这就应该选择使用Job这种控制器了。
+
+1.4 Job
+
+Job控制器控制只能执行一次作业的任务，它确保这个任务确实是正常完成而退出的，如果是异常退出，则Job控制器会重建任务再次执行直到任务正常完成。
+那么对于周期性的任务呢？显然Job控制器也是无法胜任的。这就需要CronJob了。
+
+1.5 CronJob
+
+CronJob与Job类似，也是运行一次就退出。不同之处在于，Job是只运行一次，CronJob是周期性运行。但每次运行都会有正常退出的时间。如果前一次任务还没执行完成，又到了下一次任务执行的时间点了怎么办呢？CronJob也可以解决这种问题。
+
+1.6 StatufulSet
+
+StatufulSet控制器能够管理有状态的Pod副本，而且每一个Pod副本都是被单独管理的，它拥有自己独有的标志和独有的数据集。一旦这个副本故障了，在重建Pod之前会做许多初始化操作。以Redis群集为例：如果Redis集群中三个节点中的某一个节点宕机了，为了确保每个节点宕机后数据不丢失，我们传统的做法就是对每个节点做主从复制，当主节点宕机后，需要人为的把从节点提升为主节点，想要恢复从节点，就需要很多运维操作了。
+
+但是利用StatufulSet去定义管理Redis或Mysql或者Zookeeper，它们的配置是不一样的。例如：配置管理Redis主从复制和配置管理Mysql主从复制中间的操作步骤是不一样的。所以这样的配置没有任何规律可循。StatufulSet给我们提供了一个封装，用户把需要人为操作的复杂的执行逻辑定义成脚本，放置在StatufulSet的Pod模板中。这样在每次Pod节点故障后，能通过脚本自动恢复过来。
+
+总结：真正想把有状态的应用托管在Kubernetes之上，还是有相当的难度。
+
+1.7 CDR
+Custom Defined Resources   K8S 1.8+，用户自定义资源。
+
+1.8 Helm
+任何不把用户当傻瓜的应用，都难以取得成功。K8S资源清单定义起来，门槛过高，难度大。这就诞生了Helm，Helm对于Kubernetes来说，就相当于Linux系统中的yum。以后在再部署大型的应用，就可以用Helm直接安装部署。不过Helm到目前为止，诞生也不超过两年的时间。到目前为止，许多大型主流的应用，已经可以通过Helm去部署。
+
+
+
+Pod控制器详解
+
+1、Pod控制器
+
+1.1 介绍
+　　Pod控制器是用于实现管理pod的中间层，确保pod资源符合预期的状态，pod的资源出现故障时，会尝试进行重启，当根据重启策略无效，则会重新新建pod的资源。
+
+1.2 pod控制器有多种类型
+ ReplicationController（RC）：RC保证了在所有时间内，都有特定数量的Pod副本正在运行，如果太多了，RC就杀死几个，如果太少了，RC会新建几个
+ ReplicaSet（RS）：代用户创建指定数量的pod副本数量，确保pod副本数量符合预期状态，并且支持滚动式自动扩容和缩容功能。
+ Deployment（重要）：工作在ReplicaSet之上，用于管理无状态应用，目前来说最好的控制器。支持滚动更新和回滚功能，还提供声明式配置。
+ DaemonSet：用于确保集群中的每一个节点只运行特定的pod副本，通常用于实现系统级后台任务。比如ELK服务
+ Job：只要完成就立即退出，不需要重启或重建。
+ CronJob：周期性任务控制，不需要持续后台运行
+ StatefulSet：管理有状态应用
+本文主要讲解ReplicaSet、Deployment、DaemonSet 三中类型的pod控制器。
+
+2、ReplicaSet
+
+2.1 认识ReplicaSet
+（1）什么是ReplicaSet？
+
+　　ReplicaSet是下一代复本控制器，是Replication Controller（RC）的升级版本。ReplicaSet和 Replication Controller之间的唯一区别是对选择器的支持。ReplicaSet支持labels user guide中描述的set-based选择器要求， 而Replication Controller仅支持equality-based的选择器要求。
+
+（2）如何使用ReplicaSet
+
+　　大多数kubectl 支持Replication Controller 命令的也支持ReplicaSets。rolling-update命令除外，如果要使用rolling-update，请使用Deployments来实现。
+
+　　虽然ReplicaSets可以独立使用，但它主要被 Deployments用作pod 机制的创建、删除和更新。当使用Deployment时，你不必担心创建pod的ReplicaSets，因为可以通过Deployment实现管理ReplicaSets。
+
+（3）何时使用ReplicaSet？
+
+　　ReplicaSet能确保运行指定数量的pod。然而，Deployment是一个更高层次的概念，它能管理ReplicaSets，并提供对pod的更新等功能。因此，我们建议你使用Deployment来管理ReplicaSets，除非你需要自定义更新编排。
+
+　　这意味着你可能永远不需要操作ReplicaSet对象，而是使用Deployment替代管理 。后续讲解Deployment会详细描述。
+
+2.2 ReplicaSet定义资源清单几个字段
+ apiVersion： app/v1  版本
+ kind： ReplicaSet  类型
+ metadata  元数据
+ spec  期望状态
+   minReadySeconds：应为新创建的pod准备好的最小秒数
+   replicas：副本数； 默认为1
+   selector：标签选择器
+   template：模板（必要的）
+     metadata：模板中的元数据
+     spec：模板中的期望状态
+ status  当前状态
+ 
+
+2.3 演示：创建一个简单的ReplicaSet
+（1）编写yaml文件，并创建启动
+
+简单创建一个replicaset：启动2个pod
+
+[root@master manifests]# vim rs-damo.yaml
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: myapp
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: myapp
+      release: canary
+  template:
+    metadata:
+      name: myapp-pod
+      labels:
+        app: myapp
+        release: canary
+        environment: qa
+    spec:
+      containers:
+      - name: myapp-container
+        image: ikubernetes/myapp:v1
+        ports:
+        - name: http
+          containerPort: 80
+[root@master manifests]# kubectl create -f rs-damo.yaml
+replicaset.apps/myapp created
+　　
+
+（2）查询验证
+
+---查询replicaset(rs)信息
+[root@master manifests]# kubectl get rs
+NAME      DESIRED   CURRENT   READY     AGE
+myapp     2         2         2         23s
+---查询pod信息
+[root@master manifests]# kubectl get pods
+NAME          READY     STATUS    RESTARTS   AGE
+myapp-r4ss4   1/1       Running   0          25s
+myapp-zjc5l   1/1       Running   0          26s
+---查询pod详细信息；模板中的label都生效了
+[root@master manifests]# kubectl describe pod myapp-r4ss4
+Name:               myapp-r4ss4
+Namespace:          default
+Priority:           0
+PriorityClassName:  <none>
+Node:               node2/192.168.130.105
+Start Time:         Thu, 06 Sep 2018 14:57:23 +0800
+Labels:             app=myapp
+                    environment=qa
+                    release=canary
+... ...
+---验证服务
+[root@master manifests]# curl 10.244.2.13
+Hello MyApp | Version: v1 | <a href="hostname.html">Pod Name</a>
+　　
+
+（3）生成pod原则：“多退少补”
+
+① 删除pod，会立即重新构建，生成新的pod
+
+[root@master manifests]# kubectl delete pods myapp-zjc5l
+pod "myapp-k4j6h" deleted
+[root@master ~]# kubectl get pods
+NAME          READY     STATUS    RESTARTS   AGE
+myapp-r4ss4   1/1       Running   0          33s
+myapp-mdjvh   1/1       Running   0          10s
+
+② 若另一个pod，不小心符合了rs的标签选择器，就会随机干掉一个此标签的pod
+
+---随便启动一个pod
+[root@master manifests]# kubectl get pods --show-labels
+NAME          READY     STATUS    RESTARTS   AGE       LABELS
+myapp-hxgbh   1/1       Running   0          7m        app=myapp,environment=qa,release=canary
+myapp-mdjvh   1/1       Running   0          6m        app=myapp,environment=qa,release=canary
+pod-test      1/1       Running   0          13s       app=myapp,tier=frontend
+---将pod-test打上release=canary标签
+[root@master manifests]# kubectl label pods pod-test release=canary
+pod/pod-test labeled
+---随机停掉一个pod
+[root@master manifests]# kubectl get pods --show-labels
+NAME          READY     STATUS        RESTARTS   AGE       LABELS
+myapp-hxgbh   1/1       Running       0          8m        app=myapp,environment=qa,release=canary
+myapp-mdjvh   1/1       Running       0          7m        app=myapp,environment=qa,release=canary
+pod-test      0/1       Terminating   0          1m        app=myapp,release=canary,tier=frontend
+　　
+
+2.4 ReplicaSet动态扩容/缩容
+（1）使用edit 修改rs 配置，将副本数改为5；即可实现动态扩容
+[root@master manifests]# kubectl edit rs myapp
+... ...
+spec:
+  replicas: 5
+... ...
+replicaset.extensions/myapp edited
+ 
+
+（2）验证
+[root@master manifests]# kubectl get pods
+NAME          READY     STATUS    RESTARTS   AGE
+client        0/1       Error     0          1d
+myapp-bck7l   1/1       Running   0          16s
+myapp-h8cqr   1/1       Running   0          16s
+myapp-hfb72   1/1       Running   0          6m
+myapp-r4ss4   1/1       Running   0          9m
+myapp-vvpgf   1/1       Running   0          16s
+　　
+
+2.5 ReplicaSet在线升级版本
+（1）使用edit 修改rs 配置，将容器的镜像改为v2版；即可实现在线升级版本
+
+[root@master manifests]# kubectl edit rs myapp
+... ...
+    spec:
+      containers:
+      - image: ikubernetes/myapp:v2
+... ...
+replicaset.extensions/myapp edited
+　　
+
+（2）查询rs，已经完成修改
+[root@master manifests]# kubectl get rs -o wide
+NAME      DESIRED   CURRENT   READY     AGE       CONTAINERS        IMAGES                 SELECTOR
+myapp     5         5         5         11m       myapp-container   ikubernetes/myapp:v2   app=myapp,release=canary
+　　
+
+（3）但是，修改完并没有升级
+
+需删除pod，再自动生成新的pod时，就会升级成功；
+
+即可以实现灰度发布：删除一个，会自动启动一个版本升级成功的pod
+
+---访问没有删除pod的服务，显示是V1版
+[root@master manifests]# curl 10.244.2.15
+Hello MyApp | Version: v1 | <a href="hostname.html">Pod Name</a>
+---删除一个pod，访问新生成pod的服务，版本升级为v2版
+[root@master manifests]# kubectl delete pod myapp-bck7l
+pod "myapp-bck7l" deleted
+[root@master ~]# kubectl get pods -o wide
+NAME          READY     STATUS    RESTARTS   AGE       IP            NODE
+myapp-hxgbh   1/1       Running   0          20m       10.244.1.17   node1
+[root@master manifests]# curl 10.244.1.17
+Hello MyApp | Version: v2 | <a href="hostname.html">Pod Name</a>
+　　
+
+3、Deployment
+
+3.1 Deployment简述
+（1）介绍
+
+　　Deployment 为 Pod和Replica Set 提供了一个声明式定义(declarative)方法，用来替代以前的ReplicationController来方便的管理应用
+
+　　你只需要在 Deployment 中描述您想要的目标状态是什么，Deployment controller 就会帮您将 Pod 和ReplicaSet 的实际状态改变到您的目标状态。您可以定义一个全新的 Deployment 来创建 ReplicaSet 或者删除已有的 Deployment 并创建一个新的来替换。
+
+　　注意：您不该手动管理由 Deployment 创建的 Replica Set，否则您就篡越了 Deployment controller 的职责！
+
+
+（2）典型的应用场景包括
+
+使用Deployment来创建ReplicaSet。ReplicaSet在后台创建pod。检查启动状态，看它是成功还是失败。然后，通过更新Deployment 的 Pod TemplateSpec字段来声明Pod的新状态。这会创建一个新的ReplicaSet，Deployment会按照控制的速率将pod从旧的ReplicaSet移动到新的ReplicaSet中。
+滚动升级和回滚应用：如果当前状态不稳定，回滚到之前的Deployment revision。每次回滚都会更新Deployment的revision。
+扩容和缩容：扩容Deployment以满足更高的负载。
+暂停和继续Deployment：暂停Deployment来应用PodTemplateSpec的多个修复，然后恢复上线。根据Deployment 的状态判断上线是否hang住了。
+清除旧的不必要的 ReplicaSet。
+ 
+3.2 Deployment定义资源清单几个字段
+ apiVersion： app/v1  版本
+ kind： Deployment  类型
+ metadata  元数据
+ spec  期望状态
+ --------------replicaset 也有的选项---------------
+   minReadySeconds：应为新创建的pod准备好的最小秒数
+   replicas：副本数； 默认为1
+   selector：标签选择器
+   template：模板（必须的）
+     metadata：模板中的元数据
+     spec：模板中的期望状态
+ --------------deployment 独有的选项---------------
+ strategy：更新策略；用于将现有pod替换为新pod的部署策略
+   Recreate：重新创建
+   RollingUpdate：滚动更新
+     maxSurge：可以在所需数量的pod之上安排的最大pod数；例如：5、10%
+     maxUnavailable：更新期间可用的最大pod数；
+   revisionHistoryLimit：要保留以允许回滚的旧ReplicaSet的数量，默认10
+   paused：表示部署已暂停，部署控制器不处理部署
+   progressDeadlineSeconds：在执行此操作之前部署的最长时间被认为是失败的
+ status  当前状态
+ 
+
+3.3 演示：创建一个简单的Deployment
+（1）创建一个简单的ReplicaSet，启动2个pod
+
+[root@master manifests]# vim deploy-damo.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp-deploy
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: myapp
+      release: canary
+  template:
+    metadata:
+      labels:
+        app: myapp
+        release: canary
+    spec:
+      containers:
+      - name: myapp
+        image: ikubernetes/myapp:v1
+        ports:
+        - name: http
+          containerPort: 80
+[root@master manifests]# kubectl apply -f deploy-damo.yaml
+deployment.apps/myapp-deploy configured
+注：apply 声明式创建启动；和create差不多；但是可以对一个文件重复操作；create不可以。
+
+
+（2）查询验证
+
+---查询deployment信息
+[root@master manifests]# kubectl get deploy
+NAME           DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+myapp-deploy   2         2         2            2           14s
+---查询replicaset信息；deployment会先生成replicaset
+[root@master manifests]# kubectl get rs
+NAME                      DESIRED   CURRENT   READY     AGE
+myapp-deploy-69b47bc96d   2         2         2         28s
+---查询pod信息；replicaset会再创建pod
+[root@master manifests]# kubectl get pods
+NAME                            READY     STATUS    RESTARTS   AGE
+myapp-deploy-69b47bc96d-bm8zc   1/1       Running   0          18s
+myapp-deploy-69b47bc96d-pjr5v   1/1       Running   0          18s
+　　
+
+3.4 Deployment动态扩容/缩容
+有2中方法实现
+
+（1）方法1：直接修改yaml文件，将副本数改为3
+
+[root@master manifests]# vim deploy-damo.yaml
+... ...
+spec:
+  replicas: 3
+... ...
+[root@master manifests]# kubectl apply -f deploy-damo.yaml
+deployment.apps/myapp-deploy configured
+查询验证成功：有3个pod
+
+[root@master manifests]# kubectl get pods
+NAME                            READY     STATUS    RESTARTS   AGE
+myapp-deploy-69b47bc96d-bcdnq   1/1       Running   0          25s
+myapp-deploy-69b47bc96d-bm8zc   1/1       Running   0          2m
+myapp-deploy-69b47bc96d-pjr5v   1/1       Running   0          2m
+　　
+
+（2）通过patch命令打补丁命令扩容
+
+与方法1的区别：不需修改yaml文件；平常测试时使用方便；
+
+但列表格式复杂，极容易出错
+
+[root@master manifests]# kubectl patch deployment myapp-deploy -p '{"spec":{"replicas":5}}'
+deployment.extensions/myapp-deploy patched
+查询验证成功：有5个pod
+
+[root@master ~]# kubectl get pods
+NAME                            READY     STATUS    RESTARTS   AGE
+myapp-deploy-67f6f6b4dc-2756p   1/1       Running   0          26s
+myapp-deploy-67f6f6b4dc-2lkwr   1/1       Running   0          26s
+myapp-deploy-67f6f6b4dc-knttd   1/1       Running   0          21m
+myapp-deploy-67f6f6b4dc-ms7t2   1/1       Running   0          21m
+myapp-deploy-67f6f6b4dc-vl2th   1/1       Running   0          21m
+　　
+
+3.5 Deployment在线升级版本
+
+
+（1）直接修改deploy-damo.yaml
+
+[root@master manifests]# vim deploy-damo.yaml
+... ...
+    spec:
+      containers:
+      - name: myapp
+        image: ikubernetes/myapp:v2
+... ...
+　　
+
+（2）可以动态监控版本升级
+
+[root@master ~]# kubectl get pods -w
+发现是滚动升级，先停一个，再开启一个新的（升级）；再依次停一个...
+
+ 
+
+（3）验证：访问服务，版本升级成功
+
+[root@master ~]# kubectl get pods -o wide
+NAME                            READY     STATUS    RESTARTS   AGE       IP            NODE
+myapp-deploy-67f6f6b4dc-6lv66   1/1       Running   0          2m        10.244.1.75   node1
+[root@master ~]# curl 10.244.1.75
+Hello MyApp | Version: v2 | <a href="hostname.html">Pod Name</a>
+　　
+
+3.6 Deployment修改版本更新策略
+（1）方法1：修改yaml文件
+
+[root@master manifests]# vim deploy-damo.yaml
+... ...
+  strategy:
+    rollingUpdate:
+      maxSurge: 1  #每次更新一个pod
+      maxUnavailable: 0  #最大不可用pod为0
+... ...
+　　
+
+（2）打补丁：修改更新策略
+
+[root@master manifests]# kubectl patch deployment myapp-deploy -p '{"spec":{"strategy":{"rollingUpdate":{"maxSurge":1,"maxUnavailable":0}}}}'
+deployment.extensions/myapp-deploy patched
+　　
+
+（3）验证：查询详细信息
+
+[root@master manifests]# kubectl describe deployment myapp-deploy
+... ...
+RollingUpdateStrategy:  0 max unavailable, 1 max surge
+... ...
+　　
+
+（4）升级到v3版
+
+① 金丝雀发布：先更新一个pod，然后立即暂停，等版本运行没问题了，再继续发布
+
+[root@master manifests]# kubectl set image deployment myapp-deploy myapp=ikubernetes/myapp:v3 && kubectl rollout pause deployment myapp-deploy
+deployment.extensions/myapp-deploy image updated  #一个pod更新成功
+deployment.extensions/myapp-deploy paused  #暂停更新
+② 等版本运行没问题了，解除暂停，继续发布更新
+
+[root@master manifests]# kubectl rollout resume deployment myapp-deploy
+deployment.extensions/myapp-deploy resumed
+③ 中间可以一直监控过程
+
+[root@master ~]# kubectl rollout status deployment myapp-deploy  #输出版本更新信息
+Waiting for deployment "myapp-deploy" rollout to finish: 1 out of 5 new replicas have been updated...
+Waiting for deployment spec update to be observed...
+Waiting for deployment spec update to be observed...
+Waiting for deployment "myapp-deploy" rollout to finish: 1 out of 5 new replicas have been updated...
+Waiting for deployment "myapp-deploy" rollout to finish: 1 out of 5 new replicas have been updated...
+Waiting for deployment "myapp-deploy" rollout to finish: 2 out of 5 new replicas have been updated...
+Waiting for deployment "myapp-deploy" rollout to finish: 2 out of 5 new replicas have been updated...
+---也可以使用get查询pod 更新过程
+[root@master ~]# kubectl get pods -w
+④ 验证：随便访问一个pod的服务，版本升级成功
+
+[root@master ~]# kubectl get pods -o wide
+NAME                            READY     STATUS    RESTARTS   AGE       IP            NODE
+myapp-deploy-6bdcd6755d-2bnsl   1/1       Running   0          1m        10.244.1.77   node1
+[root@master ~]# curl 10.244.1.77
+Hello MyApp | Version: v3 | <a href="hostname.html">Pod Name</a>
+　　
+
+3.7 Deployment版本回滚
+（1）命令
+
+查询版本变更历史
+
+$ kubectl rollout history deployment deployment_name
+undo回滚版本；--to-revision=  回滚到第几版本
+$ kubectl rollout undo deployment deployment_name --to-revision=N
+
+（2）演示
+
+---查询版本变更历史
+[root@master manifests]# kubectl rollout history deployment myapp-deploy
+deployments "myapp-deploy"
+REVISION  CHANGE-CAUSE
+1         <none>
+2         <none>
+3         <none>
+---回滚到第1版本
+[root@master manifests]# kubectl rollout undo deployment myapp-deploy --to-revision=1
+deployment.extensions/myapp-deploy
+[root@master manifests]# kubectl rollout history deployment myapp-deploy
+deployments "myapp-deploy"
+REVISION  CHANGE-CAUSE
+2         <none>
+3         <none>
+4         <none>
+　　
+
+（3）查询验证，已经回到v1版了
+
+[root@master manifests]# kubectl get rs -o wide
+NAME                      DESIRED   CURRENT   READY     AGE       CONTAINERS   IMAGES                 SELECTOR
+myapp-deploy-67f6f6b4dc   0         0         0         18h       myapp        ikubernetes/myapp:v2   app=myapp,pod-template-hash=2392926087,release=canary
+myapp-deploy-69b47bc96d   5         5         5         18h       myapp        ikubernetes/myapp:v1   app=myapp,pod-template-hash=2560367528,release=canary
+myapp-deploy-6bdcd6755d   0         0         0         10m       myapp        ikubernetes/myapp:v3   app=myapp,pod-template-hash=2687823118,release=canary
+　　
+
+4、DaemonSet
+
+4.1 DaemonSet简述
+（1）介绍
+
+　　DaemonSet保证在每个Node上都运行一个容器副本，常用来部署一些集群的日志、监控或者其他系统管理应用
+
+（2）典型的应用包括
+
+ 日志收集，比如fluentd，logstash等
+ 系统监控，比如Prometheus Node Exporter，collectd，New Relic agent，Ganglia gmond等
+ 系统程序，比如kube-proxy, kube-dns, glusterd, ceph等
+ 
+
+4.2 DaemonSet定义资源清单几个字段
+ apiVersion： app/v1  版本
+ kind： DaemonSet  类型
+ metadata  元数据
+ spec  期望状态
+   --------------replicaset 也有的选项---------------
+   minReadySeconds：应为新创建的pod准备好的最小秒数
+   selector：标签选择器
+   template：模板（必须的）
+   metadata：模板中的元数据
+   spec：模板中的期望状态
+   --------------daemonset 独有的选项---------------
+   revisionHistoryLimit：要保留以允许回滚的旧ReplicaSet的数量，默认10
+   updateStrategy：用新pod替换现有DaemonSet pod的更新策略
+ status  当前状态
+ 
+
+4.3 演示：创建一个简单的DaemonSet
+（1）创建并创建一个简单的DaemonSet，启动pod，只后台运行filebeat手机日志服务
+
+[root@master manifests]# vim ds-demo.yaml
+apiVersion: apps/v1
+kind: DaemonSet   # Pod控制器 
+metadata:  #描述对象的属性信息，内部嵌套多个字段
+  name: filebeat-ds #设定当前对象的名称。
+  namespace: default  #指定当前对象隶属的名称空间，
+spec:  #描述所期望对象应该具有的状态
+  selector:   # 标签选择器，用于确定控制的Pod
+    matchLabels: 
+      app: filebeat
+      release: stable
+  template:  # 标签的模板，用于创建新的Pod副本
+    metadata:
+      labels:
+        app: filebeat  # Pod标签，这里要确保跟标签选择器一致
+        release: stable
+    spec:
+      containers:
+      - name: filebeat
+        image: ikubernetes/filebeat:5.6.5-alpine
+        env:
+        - name: REDIS_HOST
+          value: redis.default.svc.cluster.local
+        - name: REDIS_LOG_LEVEL
+          value: info
+[root@master manifests]# kubectl apply -f ds-demo.yaml
+daemonset.apps/myapp-ds created
+　　
+
+（2）查询验证
+
+[root@master ~]# kubectl get ds
+NAME          DESIRED   CURRENT   READY     UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
+filebeat-ds   2         2         2         2            2           <none>          6m
+[root@master ~]# kubectl get pods
+NAME                     READY     STATUS    RESTARTS   AGE
+filebeat-ds-r25hh        1/1       Running   0          4m
+filebeat-ds-vvntb        1/1       Running   0          4m
+[root@master ~]# kubectl exec -it filebeat-ds-r25hh -- /bin/sh
+/ # ps aux
+PID   USER     TIME   COMMAND
+    1 root       0:00 /usr/local/bin/filebeat -e -c /etc/filebeat/filebeat.yml
+　　
+
+4.4 DaemonSet动态版本升级
+（1）使用kubectl set image 命令更新pod的镜像；实现版本升级
+[root@master ~]# kubectl set image daemonsets filebeat-ds filebeat=ikubernetes/filebeat:5.6.6-alpine
+daemonset.extensions/filebeat-ds image updated
+ 
+
+（2）验证，升级成功
+[root@master ~]# kubectl get ds -o wide
+NAME          DESIRED   CURRENT   READY     UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE       CONTAINERS   IMAGES                              SELECTOR
+filebeat-ds   2         2         2         2            2           <none>          7m        filebeat     ikubernetes/filebeat:5.6.6-alpine   app=filebeat,release=stable
+ 
+
+5、StatefulSet
+
+5.1 认识statefulset
+（1）statefulset介绍
+
+　　StatefulSet是为了解决有状态服务的问题（对应Deployments和ReplicaSets是为无状态服务而设计），其应用场景包括
+
+ 稳定的持久化存储，即Pod重新调度后还是能访问到相同的持久化数据，基于PVC来实现
+ 稳定的网络标志，即Pod重新调度后其PodName和HostName不变，基于Headless Service（即没有Cluster IP的Service）来实现
+ 有序部署，有序扩展，即Pod是有顺序的，在部署或者扩展的时候要依据定义的顺序依次依次进行（即从0到N-1，在下一个Pod运行之前所有之前的Pod必须都是Running和Ready状态），基于init containers来实现
+ 有序收缩，有序删除（即从N-1到0）
+ 
+
+（2）三个必要组件
+
+从上面的应用场景可以发现，StatefulSet由以下几个部分组成：
+
+ 用于定义网络标志（DNS domain）的 Headless Service（无头服务）
+ 定义具体应用的StatefulSet控制器
+ 用于创建PersistentVolumes 的 volumeClaimTemplates存储卷模板
+ 
+
+5.2 通过statefulset创建pod
+5.2.1 创建准备pv
+详情请查询PV和PVC详解，创建5个pv，需要有nfs服务器
+
+[root@master volume]# vim pv-demo.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv001
+  labels:
+    name: pv001
+spec:
+  nfs:
+    path: /data/volumes/v1
+    server: nfs
+  accessModes: ["ReadWriteMany","ReadWriteOnce"]
+  capacity:
+    storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv002
+  labels:
+    name: pv002
+spec:
+  nfs:
+    path: /data/volumes/v2
+    server: nfs
+  accessModes: ["ReadWriteOnce"]
+  capacity:
+    storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv003
+  labels:
+    name: pv003
+spec:
+  nfs:
+    path: /data/volumes/v3
+    server: nfs
+  accessModes: ["ReadWriteMany","ReadWriteOnce"]
+  capacity:
+    storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv004
+  labels:
+    name: pv004
+spec:
+  nfs:
+    path: /data/volumes/v4
+    server: nfs
+  accessModes: ["ReadWriteMany","ReadWriteOnce"]
+  capacity:
+    storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv005
+  labels:
+    name: pv005
+spec:
+  nfs:
+    path: /data/volumes/v5
+    server: nfs
+  accessModes: ["ReadWriteMany","ReadWriteOnce"]
+  capacity:
+    storage: 5Gi
+
+
+[root@master volume]# kubectl create -f pv-demo.yaml 
+[root@master volume]# kubectl get pv
+NAME      CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM     STORAGECLASS   REASON    AGE
+pv001     5Gi        RWO,RWX        Retain           Available                                      3s
+pv002     5Gi        RWO            Retain           Available                                      3s
+pv003     5Gi        RWO,RWX        Retain           Available                                      3s
+pv004     10Gi       RWO,RWX        Retain           Available                                      3s
+pv005     15Gi       RWO,RWX        Retain           Available                                      3s
+　　
+
+5.2.2 编写使用statefulset创建pod的资源清单，并创建
+
+[root@master pod_controller]# vim statefulset-demo.yaml
+#Headless Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp
+  labels:
+    app: myapp
+spec:
+  ports:
+  - port: 80
+    name: web
+  clusterIP: None
+  selector:
+    app: myapp-pod
+---
+#statefuleset
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: myapp
+spec:
+  serviceName: myapp
+  replicas: 3
+  selector:
+    matchLabels:
+      app: myapp-pod
+  template:
+    metadata:
+      labels:
+        app: myapp-pod
+    spec:
+      containers:
+      - name: myapp
+        image: ikubernetes/myapp:v1
+        ports:
+        - containerPort: 80
+          name: web
+        volumeMounts:
+        - name: myappdata
+          mountPath: /usr/share/nginx/html
+#volumeClaimTemplates
+  volumeClaimTemplates:
+  - metadata:
+      name: myappdata
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 5Gi
+[root@master pod_controller]# kubectl apply -f statefulset-demo.yaml
+service/myapp created
+statefulset.apps/myapp created
+
+注意：在执行上述命令时，可能会报以下错误，原因是已经存在无头服务了，需要删除，删除命令如下。
+The Service "myapp" is invalid: spec.clusterIP: Invalid value: "None": field is immutable
+
+# kubectl delete svc/myapp svc/nginx svc/nginx-deploy svc/nginx-test
+
+
+5.2.3 查询并验证pod
+
+---无头服务的service创建成功
+[root@master pod_controller]# kubectl get svc
+NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
+kubernetes   ClusterIP   10.96.0.1    <none>        443/TCP   173d
+myapp        ClusterIP   None         <none>        80/TCP    3s
+---statefulset创建成功
+[root@master pod_controller]# kubectl get sts
+NAME      DESIRED   CURRENT   AGE
+myapp     3         3         6s
+---查看pvc，已经成功绑定时候的pv
+[root@master pod_controller]# kubectl get pvc
+NAME                STATUS    VOLUME    CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+myappdata-myapp-0   Bound     pv002     5Gi        RWO                           9s
+myappdata-myapp-1   Bound     pv001     5Gi        RWO,RWX                       8s
+myappdata-myapp-2   Bound     pv003     5Gi        RWO,RWX                       6s
+---查看pv，有3个已经被绑定
+[root@master pod_controller]# kubectl get pv
+NAME      CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM                       STORAGECLASS   REASON    AGE
+pv001     5Gi        RWO,RWX        Retain           Bound       default/myappdata-myapp-1                            21s
+pv002     5Gi        RWO            Retain           Bound       default/myappdata-myapp-0                            21s
+pv003     5Gi        RWO,RWX        Retain           Bound       default/myappdata-myapp-2                            21s
+pv004     10Gi       RWO,RWX        Retain           Available                                                        21s
+pv005     15Gi       RWO,RWX        Retain           Available                                                        21s
+---启动了3个pod
+[root@master pod_controller]# kubectl get pods -o wide
+NAME      READY     STATUS    RESTARTS   AGE       IP             NODE
+myapp-0   1/1       Running   0          16s       10.244.1.127   node1
+myapp-1   1/1       Running   0          15s       10.244.2.124   node2
+myapp-2   1/1       Running   0          13s       10.244.1.128   node1
+　　
+
+5.3 statefulset动态扩容和缩容
+可以使用scale命令 或 patch打补丁两种方法实现。
+
+5.3.1 扩容
+由原本的3个pod扩容到5个
+
+---①使用scale命令实现
+[root@master ~]# kubectl scale sts myapp --replicas=5
+statefulset.apps/myapp scaled
+---②或者通过打补丁来实现
+[root@master ~]# kubectl patch sts myapp -p '{"spec":{"replicas":5}}'
+statefulset.apps/myapp patched
+[root@master pod_controller]# kubectl get pods
+NAME      READY     STATUS    RESTARTS   AGE
+myapp-0   1/1       Running   0          11m
+myapp-1   1/1       Running   0          11m
+myapp-2   1/1       Running   0          11m
+myapp-3   1/1       Running   0          9s
+myapp-4   1/1       Running   0          7s
+[root@master pod_controller]# kubectl get pvc
+NAME                STATUS    VOLUME    CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+myappdata-myapp-0   Bound     pv002     5Gi        RWO                           11m
+myappdata-myapp-1   Bound     pv001     5Gi        RWO,RWX                       11m
+myappdata-myapp-2   Bound     pv003     5Gi        RWO,RWX                       11m
+myappdata-myapp-3   Bound     pv004     10Gi       RWO,RWX                       13s
+myappdata-myapp-4   Bound     pv005     15Gi       RWO,RWX                       11s
+[root@master pod_controller]# kubectl get pv
+NAME      CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS    CLAIM                       STORAGECLASS   REASON    AGE
+pv001     5Gi        RWO,RWX        Retain           Bound     default/myappdata-myapp-1                            17m
+pv002     5Gi        RWO            Retain           Bound     default/myappdata-myapp-0                            17m
+pv003     5Gi        RWO,RWX        Retain           Bound     default/myappdata-myapp-2                            17m
+pv004     10Gi       RWO,RWX        Retain           Bound     default/myappdata-myapp-3                            17m
+pv005     15Gi       RWO,RWX        Retain           Bound     default/myappdata-myapp-4                            17m
+　　
+
+5.3.2 缩容
+由5个pod扩容到2个
+
+---①使用scale命令
+[root@master ~]# kubectl scale sts myapp --replicas=2
+statefulset.apps/myapp scaled
+---②通过打补丁的方法进行缩容
+[root@master ~]# kubectl patch sts myapp -p '{"spec":{"replicas":2}}'
+statefulset.apps/myapp patched
+[root@master pod_controller]# kubectl get pods
+NAME      READY     STATUS    RESTARTS   AGE
+myapp-0   1/1       Running   0          15m
+myapp-1   1/1       Running   0          15m
+---但是pv和pvc不会被删除，从而实现持久化存储
+[root@master pod_controller]# kubectl get pvc
+NAME                STATUS    VOLUME    CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+myappdata-myapp-0   Bound     pv002     5Gi        RWO                           15m
+myappdata-myapp-1   Bound     pv001     5Gi        RWO,RWX                       15m
+myappdata-myapp-2   Bound     pv003     5Gi        RWO,RWX                       15m
+myappdata-myapp-3   Bound     pv004     10Gi       RWO,RWX                       4m
+myappdata-myapp-4   Bound     pv005     15Gi       RWO,RWX                       4m
+　　
+
+5.4 版本升级
+5.4.1 升级配置介绍：rollingUpdate.partition 分区更新
+ 
+[root@master ~]# kubectl explain sts.spec.updateStrategy.rollingUpdate.partition
+KIND:     StatefulSet
+VERSION:  apps/v1
+FIELD:    partition <integer>
+DESCRIPTION:
+     Partition indicates the ordinal at which the StatefulSet should be
+     partitioned. Default value is 0.
+解释：partition分区指定为n，升级>n的分区；n指第几个容器；默认是0
+
+可以修改yaml资源清单来进行升级；也可通过打补丁的方法升级。
+
+ 
+
+5.4.2 进行“金丝雀”升级
+（1）先升级一个pod
+
+先将pod恢复到5个
+
+① 打补丁，将partition的指设为4，就只升级第4个之后的pod；只升级第5个pod，若新版本有问题，立即回滚；若没问题，就全面升级
+
+[root@master ~]# kubectl patch sts myapp -p '{"spec":{"updateStrategy":{"rollingUpdate":{"partition":4}}}}'
+statefulset.apps/myapp patched
+---查询认证
+[root@master ~]# kubectl describe sts myapp
+Name:               myapp
+Namespace:          default
+... ...
+Replicas:           5 desired | 5 total
+Update Strategy:    RollingUpdate
+  Partition:        4
+... ...
+　　
+
+② 升级
+
+[root@master ~]# kubectl set image sts/myapp myapp=ikubernetes/myapp:v2
+statefulset.apps/myapp image updated
+---已将pod镜像换位v2版
+[root@master ~]# kubectl get sts -o wide
+NAME      DESIRED   CURRENT   AGE       CONTAINERS   IMAGES
+myapp     5         5         21h       myapp        ikubernetes/myapp:v2
+　　
+
+③ 验证
+
+查看第5个pod，已经完成升级
+[root@master ~]# kubectl get pods myapp-4 -o yaml |grep image
+  - image: ikubernetes/myapp:v2
+查看前4个pod，都还是v1版本
+[root@master ~]# kubectl get pods myapp-3 -o yaml |grep image
+  - image: ikubernetes/myapp:v1
+[root@master ~]# kubectl get pods myapp-0 -o yaml |grep image
+  - image: ikubernetes/myapp:v1
+　　
+
+（2）全面升级剩下的pod
+
+---只需将partition的指设为0即可
+[root@master ~]# kubectl patch sts myapp -p '{"spec":{"updateStrategy":{"rollingUpdate":{"partition":0}}}}'
+statefulset.apps/myapp patched
+---验证，所有pod已经完成升级
+[root@master ~]# kubectl get pods myapp-0 -o yaml |grep image
+  - image: ikubernetes/myapp:v2
+
+
+
+
+service资源详解
+
+
+1、认识service
+1.1 为什么要使用service
+
+Kubernetes Pod 是有生命周期的，它们可以被创建，也可以被销毁，然而一旦被销毁生命就永远结束。 通过 ReplicationController 能够动态地创建和销毁 Pod（例如，需要进行扩缩容，或者执行 滚动升级）。 每个 Pod 都会获取它自己的 IP 地址，即使这些 IP 地址不总是稳定可依赖的。 这会导致一个问题：在 Kubernetes 集群中，如果一组 Pod（称为 backend）为其它 Pod （称为 frontend）提供服务，那么那些 frontend 该如何发现，并连接到这组 Pod 中的哪些 backend 呢？答案是：Service。
+
+
+1.2 service介绍
+　　Kubernetes Service 定义了这样一种抽象：一个 Pod 的逻辑分组，一种可以访问它们的策略 —— 通常称为微服务。 这一组 Pod 能够被 Service 访问到，通常是通过 Label Selector（下面我们会讲到我们为什么需要一个没有label selector的服务）实现的。
+
+　　举个例子，考虑一个图片处理 backend，它运行了3个副本。这些副本是可互换的 —— frontend 不需要关心它们调用了哪个 backend 副本。 然而组成这一组 backend 程序的 Pod 实际上可能会发生变化，frontend 客户端不应该也没必要知道，而且也不需要跟踪这一组 backend 的状态。 Service 定义的抽象能够解耦这种关联。
+
+　　对 Kubernetes 集群中的应用，Kubernetes 提供了简单的 Endpoints API，只要 Service 中的一组 Pod 发生变更，应用程序就会被更新。 对非 Kubernetes 集群中的应用，Kubernetes 提供了基于 VIP 的网桥的方式访问 Service，再由 Service 重定向到 backend Pod。
+
+ 
+
+1.3 三种代理模式
+
+ userspace 代理模式（K8S 1.1之前版本）
+ iptables 代理模式（K8S 1.10之前版本）
+ ipvs 代理模式（K8S 1.11 之后版本，激活ipvs需要修改配置）
+
+1.3.1 userspace 代理模式
+　　这种模式，kube-proxy 会监视 Kubernetes master 对 Service 对象和 Endpoints 对象的添加和移除。 对每个 Service，它会在本地 Node 上打开一个端口（随机选择）。 任何连接到“代理端口”的请求，都会被代理到 Service 的backend Pods 中的某个上面（如 Endpoints 所报告的一样）。 使用哪个 backend Pod，是基于 Service 的SessionAffinity来确定的。 最后，它安装iptables规则，捕获到达该 Service 的 clusterIP（是虚拟 IP）和 Port 的请求，并重定向到代理端口，代理端口再代理请求到 backend Pod。
+
+　　网络返回的结果是，任何到达 Service 的 IP:Port 的请求，都会被代理到一个合适的 backend，不需要客户端知道关于 Kubernetes、Service、或 Pod 的任何信息。
+
+　　默认的策略是，通过 round-robin 算法来选择 backend Pod。 实现基于客户端 IP 的会话亲和性，可以通过设置 service.spec.sessionAffinity 的值为 "ClientIP" （默认值为 "None"）。
+
+
+
+ 1.3.2 iptables 代理模式
+　　这种模式，kube-proxy 会监视 Kubernetes master 对 Service 对象和 Endpoints 对象的添加和移除。 对每个 Service，它会安装 iptables 规则，从而捕获到达该 Service 的 clusterIP（虚拟 IP）和端口的请求，进而将请求重定向到 Service 的一组 backend 中的某个上面。 对于每个 Endpoints 对象，它也会安装 iptables 规则，这个规则会选择一个 backend Pod。
+
+　　默认的策略是，随机选择一个 backend。 实现基于客户端 IP 的会话亲和性，可以将 service.spec.sessionAffinity 的值设置为 "ClientIP" （默认值为 "None"）。
+
+　　和 userspace 代理类似，网络返回的结果是，任何到达 Service 的 IP:Port 的请求，都会被代理到一个合适的 backend，不需要客户端知道关于 Kubernetes、Service、或 Pod 的任何信息。 这应该比 userspace 代理更快、更可靠。然而，不像 userspace 代理，如果初始选择的 Pod 没有响应，iptables 代理能够自动地重试另一个 Pod，所以它需要依赖 readiness probes。
+
+
+1.3.3 ipvs代理模式
+　　ipvs (IP Virtual Server) 实现了传输层负载均衡，也就是我们常说的4层LAN交换，作为 Linux 内核的一部分。ipvs运行在主机上，在真实服务器集群前充当负载均衡器。ipvs可以将基于TCP和UDP的服务请求转发到真实服务器上，并使真实服务器的服务在单个 IP 地址上显示为虚拟服务。
+
+　　在kubernetes v1.8 中引入了 ipvs 模式，在 v1.9 中处于 beta 阶段，在 v1.11 中已经正式可用了。 iptables 模式在 v1.1 中就添加支持了，从 v1.2 版本开始 iptables 就是 kube-proxy 默认的操作模式，ipvs 和 iptables 都是基于netfilter的， ipvs 模式和 iptables 模式之间的差异：
+
+ ipvs 为大型集群提供了更好的可扩展性和性能
+ ipvs 支持比 iptables 更复杂的复制均衡算法（最小负载、最少连接、加权等等）
+ ipvs 支持服务器健康检查和连接重试等功能
+　　同时ipvs 也依赖 iptables，ipvs 会使用 iptables 进行包过滤、SNAT、masquared(伪装)。具体来说，ipvs 将使用ipset来存储需要DROP或masquared的流量的源或目标地址，以确保 iptables 规则的数量是恒定的，这样我们就不需要关心我们有多少服务了
+
+ipvs虽然在v1.1版本中已经支持，但是想要使用，还需激活ipvs：
+
+① 修改配置文件
+[root@master ~]# vim /etc/sysconfig/kubelet
+KUBE_PROXY=MODE=ipvs
+② 编写脚本，让kubelet所在的主机，启动时装入以下几个模块：
+
+ip_vs，ip_vs_rr，ip_vs_wrr，ip_vs_sh，nf_conntrack_ipv4
+
+1.4 service定义资源清单几个字段
+apiVersion： v1  版本
+kind： Service  类型
+metadata  元数据
+spec  期望状态
+  ports：服务公开的端口列表；把哪个端口和后端建立联系
+    port：此服务将公开的端口
+    targetPort：要在服务所针对的pod上访问的端口的编号或名称
+    nodePort：K8S 集群节点上的端口
+  selector：标签选择器；关联到哪些pod资源上
+  clusterIP：服务的IP地址，通常由主服务器随机分配
+  type：确定服务的公开方式。 默认为ClusterIP
+    ClusterIP（默认）
+    NodePort
+    LoadBalancer
+    ExternelName
+    sessionAffinity：service负载均衡，默认值是None，根据iptables规则随机调度；可使用sessionAffinity保持会话连线；
+    status  当前状态
+ 
+
+1.5 service的4中类型
+ ClusterIP（默认）：仅用于集群内通信，集群内部可达，可以被各pod访问，节点本身可访问；
+ NodePort：构建在ClusterIP上，并在路由到clusterIP的每个节点上分配一个端口；
+ client ---> NodeIP:NodePort ---> ClusterIP:ServicePort ---> PodIP:containePort
+ LoadBalancer：构建在NodePort上，并创建一个外部负载均衡器（如果在当前云中受支持），它将路由到clusterIP；
+ ExternelName：通过CNAME将service与externalName的值(比如：foo.bar.example.com)映射起来. 要求kube-dns的版本为1.7或以上.
+ 
+
+2、创建clusterIP类型的service
+（1）编写yaml文件并创建名为redis的service
+
+先创建一个deployment，启动一个redis pod；在使用service绑定这个pod
+
+[root@master manifests]# vim redis-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: default
+spec:
+  selector:
+    app: redis
+    role: logstor
+  clusterIP: 10.99.99.99
+  type: ClusterIP
+  ports:
+  - port: 6380
+    targetPort: 6379
+[root@master manifests]# kubectl apply -f redis-svc.yaml
+deployment.apps/redis created
+service/redis created
+　　
+
+（2）查询验证
+[root@master ~]# kubectl get svc
+NAME         TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)    AGE
+kubernetes   ClusterIP   10.96.0.1     <none>        443/TCP    142d
+redis        ClusterIP   10.99.99.99   <none>        6380/TCP   12s
+---查询service详细信息，pod绑定成功
+[root@master ~]# kubectl describe svc redis
+Name:              redis
+Namespace:         default
+Labels:            <none>
+Annotations:       kubectl.kubernetes.io/last-applied-configuration={"apiVersion":"v1","kind":"Service","metadata":{"annotations":{},"name":"redis","namespace":"default"},"spec":{"clusterIP":"10.99.99.99","ports":[{"por...
+Selector:          app=redis,role=logstor
+Type:              ClusterIP
+IP:                10.99.99.99
+Port:              <unset>  6380/TCP
+TargetPort:        6379/TCP
+Endpoints:         10.244.2.94:6379
+Session Affinity:  None
+Events:            <none>
+　　
+
+3、创建NodePort类型的service
+3.1 创建service
+（1）编写yaml文件并创建名为myapp的service
+
+先创建一个deployment，启动3个myapp pod；在使用service绑定这3个pod
+
+[root@master manifests]# vim myapp-svc.yaml
+apiVersion: v1
+kind: Service 
+metadata:  #描述对象的属性信息
+  name: myapp  #对象的名称
+  namespace: default #对象的名称空间
+spec: #对期望对象应该具有的状态。
+  selector:   #指定标签选择器关联到哪些pod资源上
+    app: myapp
+    release: canary
+  clusterIP: 10.97.97.97   #IP是集群自动分配的，如果想要固定的IP，那么就直接指定固定的地址，创建之后无法改变
+  type: NodePort #指定服务类型为NodePort
+  ports:
+  - port: 80  #service暴露的端口
+    targetPort: 80 #容器的端口
+    nodePort: 31180  # 外部节点的端口，在service的类型是nodePort才有用，端口范围30000-32726  
+[root@master manifests]# kubectl apply -f myapp-svc.yaml
+deployment.apps/myapp-deploy unchanged
+service/myapp created
+　　
+
+（2）查询验证
+
+[root@master ~]# kubectl get svc
+NAME         TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)        AGE
+kubernetes   ClusterIP   10.96.0.1     <none>        443/TCP        145d
+myapp        NodePort    10.97.97.97   <none>        80:31180/TCP   39s
+redis        ClusterIP   10.99.99.99   <none>        6380/TCP       2d
+[root@master ~]# kubectl describe svc myapp
+Name:                     myapp
+Namespace:                default
+Labels:                   <none>
+Annotations:              kubectl.kubernetes.io/last-applied-configuration={"apiVersion":"v1","kind":"Service","metadata":{"annotations":{},"name":"myapp","namespace":"default"},"spec":{"clusterIP":"10.97.97.97","ports":[{"nod...
+Selector:                 app=myapp,release=canary
+Type:                     NodePort
+IP:                       10.97.97.97
+Port:                     <unset>  80/TCP
+TargetPort:               80/TCP
+NodePort:                 <unset>  31180/TCP
+Endpoints:                10.244.1.96:80,10.244.2.101:80,10.244.2.102:80
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Events:                   <none>
+
+
+
+3.2 使用sessionAffinity保持会话连接
+（1）sessionAffinity默认是None，没有修改前，访问业务是随机调度
+
+[root@master ~]# while true; do curl 192.168.10.103:31180/hostname.html; sleep 1; done
+myapp-deploy-69b47bc96d-mmb5v
+myapp-deploy-69b47bc96d-wtbx7
+myapp-deploy-69b47bc96d-wtbx7
+myapp-deploy-69b47bc96d-cj48v
+... ...
+　　
+（2）打补丁修改sessionAffinity为clientip；实现会话连接
+
+也可以使用exec修改；或者直接修改yaml文件也可以；
+
+[root@master ~]# kubectl patch svc myapp -p '{"spec":{"sessionAffinity":"ClientIP"}}'
+service/myapp patched
+　　
+
+（3）查询验证
+[root@master ~]# kubectl describe svc myapp
+Name:                     myapp
+Namespace:                default
+Labels:                   <none>
+Annotations:              kubectl.kubernetes.io/last-applied-configuration={"apiVersion":"v1","kind":"Service","metadata":{"annotations":{},"name":"myapp","namespace":"default"},"spec":{"clusterIP":"10.97.97.97","ports":[{"nod...
+Selector:                 app=myapp,release=canary
+Type:                     NodePort
+IP:                       10.97.97.97
+Port:                     <unset>  80/TCP
+TargetPort:               80/TCP
+NodePort:                 <unset>  31180/TCP
+Endpoints:                10.244.1.96:80,10.244.2.101:80,10.244.2.102:80
+Session Affinity:         ClientIP
+External Traffic Policy:  Cluster
+Events:                   <none>
+　　
+
+（4）访问业务查询验证；发现同一客户端的请求始终发往同一pod
+
+[root@master ~]# while true; do curl 192.168.10.103:31180/hostname.html; sleep 1; done
+myapp-deploy-69b47bc96d-cj48v
+myapp-deploy-69b47bc96d-cj48v
+myapp-deploy-69b47bc96d-cj48v
+myapp-deploy-69b47bc96d-cj48v
+... ...
+　　
+
+（5）重新打补丁修改为None，立即恢复为随机调度
+
+[root@master ~]# kubectl patch svc myapp -p '{"spec":{"sessionAffinity":"None"}}'
+service/myapp patched
+[root@master ~]# while true; do curl 192.168.10.103:31180/hostname.html; sleep 1; done
+myapp-deploy-69b47bc96d-cj48v
+myapp-deploy-69b47bc96d-mmb5v
+myapp-deploy-69b47bc96d-cj48v
+myapp-deploy-69b47bc96d-mmb5v
+　　
+
+4、创建无头service
+（1）编写yaml文件并创建名为myapp-svc的service
+
+绑定上面创建myapp的3个pod
+
+[root@master manifests]# vim myapp-svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp-svc
+  namespace: default
+spec:
+  selector:
+    app: myapp
+    release: canary
+  clusterIP: None  #定义为None，表示无头服务
+  ports:
+  - port: 80
+    targetPort: 80
+[root@master manifests]# kubectl apply -f myapp-svc-headless.yaml
+service/myapp-svc created
+　　
+
+（2）查询验证
+
+[root@master ~]# kubectl get svc
+NAME         TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)        AGE
+kubernetes   ClusterIP   10.96.0.1     <none>        443/TCP        145d
+myapp        NodePort    10.97.97.97   <none>        80:31180/TCP   2h
+myapp-svc    ClusterIP   None          <none>        80/TCP         6s
+redis        ClusterIP   10.99.99.99   <none>        6380/TCP       2d
+　　
+
+（3）和有头正常myapp的service对比
+
+获取dns服务的名称空间ip：
+
+[root@master manifests]# kubectl get svc -n kube-system
+NAME       TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)                  AGE
+kube-dns   ClusterIP   10.96.0.10   <none>        53/UDP,53/TCP,9153/TCP   27h
+
+无头service的解析：
+
+[root@master manifests]# dig -t A myapp-svc.default.svc.cluster.local. @10.96.0.10
+... ...
+;; ANSWER SECTION:
+myapp-svc.default.svc.cluster.local. 5 IN A 10.244.1.96
+myapp-svc.default.svc.cluster.local. 5 IN A 10.244.2.101
+myapp-svc.default.svc.cluster.local. 5 IN A 10.244.2.102
+... ...
+有头正常myapp的service的解析：
+
+[root@master manifests]# dig -t A myapp.default.svc.cluster.local. @10.96.0.10
+... ...
+;; ANSWER SECTION:
+myapp.default.svc.cluster.local. 5 IN   A   10.97.97.97
+... ...
+
+Ingress
+
+service完成对资源分类，ingress通过service得知后端主机，ingress通过ingress controller注入并保存配置文件，ingress发现后端资源发生改变，及时注入到pod中
+
+
+我们可以了解到Kubernetes暴露服务的方式目前只有三种：LoadBlancer Service、ExternalName、NodePort Service、Ingress；而我们需要将集群内服务提供外界访问就会产生以下几个问题：
+
+1、Pod 漂移问题
+
+Kubernetes 具有强大的副本控制能力，能保证在任意副本（Pod）挂掉时自动从其他机器启动一个新的，还可以动态扩容等，通俗地说，这个 Pod 可能在任何时刻出现在任何节点上，也可能在任何时刻死在任何节点上；那么自然随着 Pod 的创建和销毁，Pod IP 肯定会动态变化；那么如何把这个动态的 Pod IP 暴露出去？这里借助于 Kubernetes 的 Service 机制，Service 可以以标签的形式选定一组带有指定标签的Pod，并监控和自动负载他们的 Pod IP，那么我们向外暴露只暴露Service IP 就行了；这就是 NodePort 
+
+2、端口管理问题
+
+采用 NodePort 方式暴露服务的问题是，服务一旦多起来，NodePort 在每个节点上开启的端口会相当庞大，而且难以维护；这时，我们可以能否使用一个Nginx直接对内进行转发呢？众所周知的是，Pod与Pod之间是可以互相通信的，而Pod是可以共享宿主机的网络名称空间的，也就是说当在共享网络名称空间时，Pod上所监听的就是Node上的端口。那么这又该如何实现呢？简单的实现就是使用 DaemonSet 在每个 Node 上监听 80，然后写好规则，因为Nginx外面绑定了宿主机 80 端口（就像 NodePort），本身又在集群内，那么向后直接转发到相应 Service IP 就行了，
+
+
+3、域名分配及动态更新问题
+
+从上面的方法，采用 Nginx-Pod 已经解决了问题，但是其实这里面有一个很大缺陷：当每次有新服务加入又该如何修改 Nginx 配置呢？我们知道使用Nginx可以通过虚拟主机域名进行区分不同的服务，而每个服务通过upstream进行定义不同的负载均衡池，再加上location进行负载均衡的反向代理，在日常使用中只需要修改nginx.conf即可实现，那在K8S中又该如何实现这种方式的调度呢？？？
+假设后端的服务初始服务只有ecshop，后面增加了bbs和member服务，那么又该如何将这2个服务加入到Nginx-Pod进行调度呢？不能每次手动改或者Rolling Update 前端 Nginx Pod 吧！！此时 Ingress 出现了，如果不算上面的Nginx，Ingress 包含两大组件：Ingress Controller 和 Ingress。
+
+Ingress 简单的理解就是你原来需要改 Nginx 配置，然后配置各种域名对应哪个 Service，现在把这个动作抽象出来，变成一个 Ingress 对象，你可以用 yaml 创建，每次不要去改 Nginx 了，直接改 yaml 然后创建/更新就行了；那么问题来了：”Nginx 该怎么处理？”
+
+Ingress Controller 就是解决 “Nginx 的处理方式”；Ingress Controller 通过与 Kubernetes API 交互，动态的去感知集群中 Ingress 规则变化，然后读取他，按照他自己模板生成一段 Nginx 配置，再写到 Nginx Pod 里，最后 reload 一下，
+
+Ingress controller的作用就是实时感知Ingress路由规则集合的变化，再与Api Server交互，获取Service、Pod在集群中的 IP等信息，然后发送给反向代理web服务器，刷新其路由配置信息，这就是它的服务发现机制。
+
+
+ingress原理：
+
+客户端请求到外部的负载均衡器externalLB把请求调度到一个NodePort类型的Service(ingress-nginx)上，然后nodePort类型的Service(ingress-nginx)又把它调度到内部的叫做ingress Controller的Pod上，ingress Ctroller根据ingress中的定义(主机名还是URL)，每一组主机名或者URL都对应后端的Pod资源，并且用Service分组(service>site1/<service>site2只是用来做分组用的)
+
+
+注意：Ingress Controller不同于Deployment 控制器的是，Ingress控制器不直接运行为kube-controller-manager的一部分，它仅仅是Kubernetes集群的一个附件，类似于CoreDNS，需要在集群上单独部署。
+
+
+1.4 Ingress定义资源清单几个字段
+apiVersion： v1  版本
+kind： Ingress  类型
+metadata  元数据
+spec  期望状态
+   backend： 默认后端，能够处理与任何规则不匹配的请求
+   rules：用于配置Ingress的主机规则列表
+   tls：目前Ingress仅支持单个TLS端口443
+status  当前状态
+ 
+
+2、部署一个Ingress
+（1）在gitlab上下载yaml文件，并创建部署
+
+gitlab ingress-nginx项目：https://github.com/kubernetes/ingress-nginx
+
+ingress安装指南：https://kubernetes.github.io/ingress-nginx/deploy/
+
+因为需要拉取镜像，所以需要等一段时间
+
+---下载需要的yaml文件
+[root@master ~]# mkdir /ingress-nginx
+[root@master ~]# cd /ingress-nginx
+[root@master ingress-nginx]# wget https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/mandatory.yaml
+---查询下载成功
+[root@master ingress-nginx]# ls
+mandatory.yaml
+---创建ingress
+[root@master ingress-nginx]# kubectl apply -f mandatory.yaml
+namespace/ingress-nginx created
+configmap/nginx-configuration created
+configmap/tcp-services created
+configmap/udp-services created
+serviceaccount/nginx-ingress-serviceaccount created
+clusterrole.rbac.authorization.k8s.io/nginx-ingress-clusterrole created
+role.rbac.authorization.k8s.io/nginx-ingress-role created
+rolebinding.rbac.authorization.k8s.io/nginx-ingress-role-nisa-binding created
+clusterrolebinding.rbac.authorization.k8s.io/nginx-ingress-clusterrole-nisa-binding created
+deployment.apps/nginx-ingress-controller created
+
+（2）如果是裸机，还需要安装service
+
+[root@master ingress-nginx]# wget https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/provider/baremetal/service-nodeport.yaml
+[root@master ingress-nginx]# kubectl apply -f service-nodeport.yaml
+service/ingress-nginx created
+
+（3）验证
+
+---查询生产的pod
+[root@master ~]# kubectl get pods -n ingress-nginx
+NAME                                        READY     STATUS    RESTARTS   AGE
+nginx-ingress-controller-648c7bb65b-df9qz   1/1       Running   0          34m
+---查询生产的svc
+[root@master ingress-nginx]# kubectl get svc -n ingress-nginx
+NAME            TYPE       CLUSTER-IP       EXTERNAL-IP   PORT(S)                      AGE
+ingress-nginx   NodePort   10.109.244.123   <none>        80:30080/TCP,443:30443/TCP   21s
+---查询svc的详细信息
+[root@master ~]# kubectl describe svc ingress-nginx -n ingress-nginx
+Name:                     ingress-nginx
+Namespace:                ingress-nginx
+Labels:                   app.kubernetes.io/name=ingress-nginx
+                          app.kubernetes.io/part-of=ingress-nginx
+Annotations:              kubectl.kubernetes.io/last-applied-configuration={"apiVersion":"v1","kind":"Service","metadata":{"annotations":{},"labels":{"app.kubernetes.io/name":"ingress-nginx","app.kubernetes.io/part-of":"ingres...
+Selector:                 app.kubernetes.io/name=ingress-nginx,app.kubernetes.io/part-of=ingress-nginx
+Type:                     NodePort
+IP:                       10.111.143.90
+Port:                     http  80/TCP
+TargetPort:               80/TCP
+NodePort:                 http  30080/TCP
+Endpoints:                10.244.1.104:80
+Port:                     https  443/TCP
+TargetPort:               443/TCP
+NodePort:                 https  30443/TCP
+Endpoints:                10.244.1.104:443
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Events:                   <none>
+　　
+
+3、创建Ingress，代理到后端nginx服务
+
+3.1 准备后端pod和service
+（1）编写yaml文件，并创建
+
+创建3个nginx服务的pod，并创建一个service绑定
+
+[root@master ingress]# vim deploy-damo.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp
+  namespace: default
+spec:
+  selector:
+    app: myapp
+    release: canary
+  ports:
+  - name: http
+    targetPort: 80
+    port: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp-deploy
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: myapp
+      release: canary
+  template:
+    metadata:
+      labels:
+        app: myapp
+        release: canary
+    spec:
+      containers:
+      - name: myapp
+        image: ikubernetes/myapp:v2
+        ports:
+        - name: http
+          containerPort: 80
+[root@master ingress]# kubectl apply -f deploy-damo.yaml
+service/myapp created
+deployment.apps/myapp-deploy created
+　　
+
+（2）查询验证
+
+[root@master ~]# kubectl get svc
+NAME         TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)   AGE
+kubernetes   ClusterIP   10.96.0.1        <none>        443/TCP   146d
+myapp        ClusterIP   10.103.137.126   <none>        80/TCP    6s
+[root@master ~]# kubectl get pods
+NAME                            READY     STATUS    RESTARTS   AGE
+myapp-deploy-67f6f6b4dc-2vzjn   1/1       Running   0          14s
+myapp-deploy-67f6f6b4dc-c7f76   1/1       Running   0          14s
+myapp-deploy-67f6f6b4dc-x79hc   1/1       Running   0          14s
+[root@master ~]# kubectl describe svc myapp
+Name:              myapp
+Namespace:         default
+Labels:            <none>
+Annotations:       kubectl.kubernetes.io/last-applied-configuration={"apiVersion":"v1","kind":"Service","metadata":{"annotations":{},"name":"myapp","namespace":"default"},"spec":{"ports":[{"name":"http","port":80,"targe...
+Selector:          app=myapp,release=canary
+Type:              ClusterIP
+IP:                10.103.137.126
+Port:              http  80/TCP
+TargetPort:        80/TCP
+Endpoints:         10.244.1.102:80,10.244.1.103:80,10.244.2.109:80
+Session Affinity:  None
+Events:            <none>
+　　
+
+3.2 创建ingress，绑定后端nginx服务
+（1）编写yaml文件，并创建
+[root@master ingress]# vim ingress-myapp.yaml
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: ingress-myapp
+  namespace: default
+spec:
+  rules:
+  - host: myapp.along.com
+    http:
+      paths:
+      - path:
+        backend:
+          serviceName: myapp #注此处必须要和后端pod的service的名称一致，否则会报503错误
+          servicePort: 80    #注此处必须要和后端pod的service的端口一致，否则会报503错误
+[root@master ingress]# kubectl apply -f ingress-myapp.yaml
+ingress.extensions/ingress-myapp created
+　　
+
+（2）查询验证
+
+[root@master ~]# kubectl get ingress
+NAME            HOSTS             ADDRESS   PORTS     AGE
+ingress-myapp   myapp.along.com             80        140d
+[root@master ~]# kubectl describe ingress ingress-myapp
+Name:             ingress-myapp
+Namespace:        default
+Address:         
+Default backend:  default-http-backend:80 (<none>)
+Rules:
+  Host             Path  Backends
+  ----             ----  --------
+  myapp.along.com 
+                      myapp:80 (<none>)
+Annotations:
+  kubectl.kubernetes.io/last-applied-configuration:  {"apiVersion":"extensions/v1beta1","kind":"Ingress","metadata":{"annotations":{},"name":"ingress-myapp","namespace":"default"},"spec":{"rules":[{"host":"myapp.along.com","http":{"paths":[{"backend":{"serviceName":"myapp","servicePort":80},"path":null}]}}]}}
+ 
+Events:
+  Type    Reason  Age   From                      Message
+  ----    ------  ----  ----                      -------
+  Normal  CREATE  37s   nginx-ingress-controller  Ingress default/ingress-myapp
+　　
+
+（3）在集群外，查询服务验证
+
+①可以先修改一下主机的hosts，因为不是公网域名
+
+192.168.130.103 myapp.along.com
+
+② 访问业务成功
+
+4、创建Ingress，代理到后端tomcat服务
+
+4.1 准备后端pod和service
+（1）编写yaml文件，并创建
+
+创建3个tomcat服务的pod，并创建一个service绑定
+
+[root@master ingress]# vim tomcat-deploy.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: tomcat
+  namespace: default
+spec:
+  selector:
+    app: tomcat
+    release: canary
+  ports:
+  - name: http
+    targetPort: 8080
+    port: 8080
+  - name: ajp
+    targetPort: 8009
+    port: 8009
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tomcat-deploy
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: tomcat
+      release: canary
+  template:
+    metadata:
+      labels:
+        app: tomcat
+        release: canary
+    spec:
+      containers:
+      - name: tomcat
+        image: tomcat:8.5.37-jre8-alpine
+        ports:
+        - name: http
+          containerPort: 8080
+        - name: ajp
+          containerPort: 8009
+[root@master ingress]# kubectl apply -f tomcat-deploy.yaml
+service/tomcat created
+deployment.apps/tomcat-deploy created
+
+（2）查询验证
+
+[root@master ~]# kubectl get pods
+NAME                            READY     STATUS    RESTARTS   AGE
+tomcat-deploy-97d6458c5-hrmrw   1/1       Running   0          1m
+tomcat-deploy-97d6458c5-ngxxx   1/1       Running   0          1m
+tomcat-deploy-97d6458c5-xchgn   1/1       Running   0          1m
+[root@master ~]# kubectl get svc
+NAME         TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)             AGE
+kubernetes   ClusterIP   10.96.0.1        <none>        443/TCP             146d
+tomcat       ClusterIP   10.98.193.252    <none>        8080/TCP,8009/TCP   1m
+　　
+
+4.2 创建ingress，绑定后端tomcat服务
+（1）编写yaml文件，并创建
+
+[root@master ingress]# vim ingress-tomcat.yaml
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: ingress-tomcat
+  namespace: default
+spec:
+  rules:
+  - host: tomcat.along.com
+    http:
+      paths:
+      - path:
+        backend:
+          serviceName: tomcat
+          servicePort: 8080
+[root@master ingress]# kubectl apply -f ingress-tomcat.yaml
+ingress.extensions/ingress-tomcat created
+ 
+（2）查询验证
+
+[root@master ~]# kubectl get ingress
+NAME             HOSTS              ADDRESS   PORTS     AGE
+ingress-myapp    myapp.along.com              80        17m
+ingress-tomcat   tomcat.along.com             80        6s
+[root@master ~]# kubectl describe ingress ingress-tomcat
+Name:             ingress-tomcat
+Namespace:        default
+Address:         
+Default backend:  default-http-backend:80 (<none>)
+Rules:
+  Host              Path  Backends
+  ----              ----  --------
+  tomcat.along.com 
+                       tomcat:8080 (<none>)
+Annotations:
+  kubectl.kubernetes.io/last-applied-configuration:  {"apiVersion":"extensions/v1beta1","kind":"Ingress","metadata":{"annotations":{},"name":"ingress-tomcat","namespace":"default"},"spec":{"rules":[{"host":"tomcat.along.com","http":{"paths":[{"backend":{"serviceName":"tomcat","servicePort":8080},"path":null}]}}]}}
+ 
+Events:
+  Type    Reason  Age   From                      Message
+  ----    ------  ----  ----                      -------
+  Normal  CREATE  17s   nginx-ingress-controller  Ingress default/ingress-tomcat
+　　
+
+（3）在集群外，查询服务验证
+
+① 可以先修改一下主机的hosts，因为不是公网域名
+
+192.168.130.103 tomcat.along.com
+
+② 访问业务成功
+
+
+
+4.3 使用https协议访问服务
+
+4.3.1 创建证书、私钥和secret
+（1）创建私钥
+
+[root@master ingress]# openssl genrsa -out tls.key 2048
+Generating RSA private key, 2048 bit long modulus
+.............................................+++
+...............+++
+e is 65537 (0x10001)
+[root@master ingress]# ls *key
+tls.key
+
+（2）创建证书
+
+[root@master ingress]# openssl req -new -x509 -key tls.key -out tls.crt -subj /C=CN/ST=Beijing/L=Beijing/O=DevOps/CN=tomcat.along.com
+[root@master ingress]# ls tls.*
+tls.crt  tls.key
+
+（3）创建secret
+
+[root@master ingress]# kubectl create secret tls tomcat-ingress-secret --cert=tls.crt --key=tls.key
+secret/tomcat-ingress-secret created
+[root@master ingress]# kubectl get secret
+NAME                              TYPE                                  DATA      AGE
+tomcat-ingress-secret             kubernetes.io/tls                     2         8s
+[root@master ingress]# kubectl describe secret tomcat-ingress-secret
+Name:         tomcat-ingress-secret
+Namespace:    default
+Labels:       <none>
+Annotations:  <none>
+ 
+Type:  kubernetes.io/tls
+ 
+Data
+====
+tls.key:  1675 bytes
+tls.crt:  1294 bytes
+　　
+
+4.3.2 重新创建ingress，使用https协议绑定后端tomcat服务
+（1）编写yaml文件，并创建
+
+[root@master ingress]# vim ingress-tomcat-tls.yaml
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: ingress-tomcat-tls
+  namespace: default
+spec:
+  tls:
+  - hosts:
+    - tomcat.along.com
+    secretName: tomcat-ingress-secret
+  rules:
+  - host: tomcat.along.com
+    http:
+      paths:
+      - path:
+        backend:
+          serviceName: tomcat
+          servicePort: 8080
+　　
+
+（2）查询验证
+
+[root@master ~]# kubectl get ingress
+NAME                 HOSTS              ADDRESS   PORTS     AGE
+ingress-myapp        myapp.along.com              80        34m
+ingress-tomcat       tomcat.along.com             80        16m
+ingress-tomcat-tls   tomcat.along.com             80, 443   8s
+[root@master ~]# kubectl describe ingress ingress-tomcat-tls
+Name:             ingress-tomcat-tls
+Namespace:        default
+Address:         
+Default backend:  default-http-backend:80 (<none>)
+TLS:
+  tomcat-ingress-secret terminates tomcat.along.com
+Rules:
+  Host              Path  Backends
+  ----              ----  --------
+  tomcat.along.com 
+                       tomcat:8080 (<none>)
+Annotations:
+  kubectl.kubernetes.io/last-applied-configuration:  {"apiVersion":"extensions/v1beta1","kind":"Ingress","metadata":{"annotations":{},"name":"ingress-tomcat-tls","namespace":"default"},"spec":{"rules":[{"host":"tomcat.along.com","http":{"paths":[{"backend":{"serviceName":"tomcat","servicePort":8080},"path":null}]}}],"tls":[{"hosts":["tomcat.along.com"],"secretName":"tomcat-ingress-secret"}]}}
+ 
+Events:
+  Type    Reason  Age   From                      Message
+  ----    ------  ----  ----                      -------
+  Normal  CREATE  14s   nginx-ingress-controller  Ingress default/ingress-tomcat-tls
+　　
+
+（3）在集群外，查询服务验证
+
+使用https协议，访问业务成功
+https://tomcat.along.com:30443
+
+
+存储卷详解
+
+1.3 存储卷常用类型
+ 非持久性存储
+ emptyDir
+ hostPath
+ 网络连接性存储
+ SAN：iSCSI
+ NFS：nfs，cfs
+ 分布式存储
+ glusterfs、rbd、cephfs
+ 云端存储
+ EBS、Azure Disk、阿里云、gitRepo
+
+$ kubectl explain pod.spec.volumes 查询k8s支持的所有类型存储卷
+
+2、emptyDir存储卷
+2.1 emptyDir介绍
+　　使用emptyDir，当Pod分配到Node上时，将会创建emptyDir，并且只要Node上的Pod一直运行，Volume就会一直存。当Pod（不管任何原因）从Node上被删除时，emptyDir也同时会删除，存储的数据也将永久删除。
+
+　　常用于作为临时目录、或缓存使用。
+
+2.2 演示：创建emptyDir存储卷
+（1）编写yaml文件，并创建
+
+先创建一个名为html的存储卷；再由2个pod都挂载此存储卷；
+
+pod1基于此存储卷作为nginx的主目录；pod2向此存储卷目录写入东西；
+
+[root@master volumes]# vim vol-emptyDir-demo.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-vol-demo
+  namespace: default
+  labels:
+    app: myapp
+    tier: frontend
+  annotations:
+    along.com/created-by: "cluster admin"
+spec:
+  volumes:
+  - name: html
+    emptyDir: {}
+  containers:
+  - name: myapp
+    image: ikubernetes/myapp:v1
+    imagePullPolicy: IfNotPresent
+    ports:
+    - name: http
+      containerPort: 80
+    volumeMounts:
+    - name: html
+      mountPath: /usr/share/nginx/html/
+  - name: busybox
+    image: busybox:latest
+    imagePullPolicy: IfNotPresent
+    volumeMounts: #在容器中挂载卷
+    - name: html  #挂载卷的名称
+      mountPath: /data/ #挂载点路径
+    command:
+    - "/bin/sh"
+    - "-c"
+    - "while true; do echo $(date) >> /data/index.html; sleep 2; done"
+注意：需要使用容器需要挂载存储卷，它可以共享使用。
+[root@master volumes]# kubectl apply -f vol-emptyDir-demo.yaml
+pod/pod-vol-demo created
+　　
+
+（2）验证
+
+---pod创建成功
+[root@master ~]# kubectl get pods -o wide
+NAME           READY     STATUS    RESTARTS   AGE       IP             NODE
+pod-vol-demo   2/2       Running   0          13s       10.244.1.106   node1
+---访问业务，输出是pod2的输入
+[root@master ~]# curl 10.244.1.106
+Tue Jan 29 07:19:13 UTC 2019
+Tue Jan 29 07:19:15 UTC 2019
+Tue Jan 29 07:19:17 UTC 2019
+Tue Jan 29 07:19:19 UTC 2019
+Tue Jan 29 07:19:21 UTC 2019
+Tue Jan 29 07:19:23 UTC 2019
+Tue Jan 29 07:19:25 UTC 2019
+Tue Jan 29 07:19:27 UTC 2019
+Tue Jan 29 07:19:29 UTC 2019
+　　
+
+3、hostPath存储卷
+
+3.1 emptyDir介绍
+　　hostPath允许挂载Node（宿主机）上的文件系统到Pod里面去。如果Pod需要使用Node上的文件，可以使用hostPath。
+连接到容器内部
+kubectl exec -it pod-demo -c busybox -- /bin/sh
+
+3.2 hostPath类型
+值 行为
+空 空字符串（默认）用于向后兼容，这意味着在安装hostPath卷之前不会执行任何检查。
+DirectoryOrCreate 如果给定路径中不存在任何内容，则将根据需要创建一个空目录，权限设置为0755，与Kubelet具有相同的组和所有权。
+Directory 目录必须存在于给定路径中
+FileOrCreate  如果给定路径中不存在任何内容，则会根据需要创建一个空文件，权限设置为0644，与Kubelet具有相同的组和所有权。
+File  文件必须存在于给定路径中
+Socket  UNIX套接字必须存在于给定路径中
+CharDevice  字符设备必须存在于给定路径中
+BlockDevice 块设备必须存在于给定路径中
+ 
+
+3.2 演示：创建hostPath存储卷
+（1）编写yaml文件，并创建
+
+创建存储卷，使用DirectoryOrCreate类型，node节点不存在会自动创建
+
+[root@master volumes]# vim vol-hostpath-demo.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vol-hostpath
+  namespace: default
+spec:
+  volumes:
+  - name: html
+    hostPath:
+      path: /data/pod/volume1/
+      type: DirectoryOrCreate
+  containers:
+  - name: myapp
+    image: ikubernetes/myapp:v1
+    volumeMounts:
+    - name: html
+      mountPath: /usr/share/nginx/html/
+[root@master volumes]# kubectl apply -f vol-hostpath-demo.yaml
+pod/vol-hostpath created
+　　
+
+（2）查询验证
+
+[root@master volumes]# kubectl get pods -o wide
+NAME           READY     STATUS    RESTARTS   AGE       IP             NODE
+vol-hostpath   1/1       Running   0          3s        10.244.1.111   node1
+---在node1上查询是否生产目录
+[root@node1 ~]# ll -d /data/pod/volume1/index.html
+-rw-r--r-- 1 root root 17 Sep 21 14:44 /data/pod/volume1/index.html
+　　
+
+（3）验证存储卷功能
+
+---在node1上生成文件
+[root@node1 ~]# echo "node01.along.com" > /data/pod/volume1/index.html
+---访问pod内服务，显示成功
+[root@master volumes]# curl 10.244.1.111
+node01.along.com
+　　
+
+（4）就算pod被删除再重建，只要node还在，存储卷就还在
+
+[root@master volumes]# kubectl delete -f vol-hostpath-demo.yaml
+pod "vol-hostpath" deleted
+[root@master volumes]# kubectl apply -f vol-hostpath-demo.yaml
+pod/vol-hostpath created
+[root@master volumes]# kubectl get pods -o wide
+NAME           READY     STATUS    RESTARTS   AGE       IP             NODE
+vol-hostpath   1/1       Running   0          3s        10.244.1.112   node1
+[root@master volumes]# curl 10.244.1.112
+node01.along.com
+　　
+
+4、共享存储NFS存储卷
+4.1 NFS存储卷介绍
+　　NFS 是Network File System的缩写，即网络文件系统。Kubernetes中通过简单地配置就可以挂载NFS到Pod中，而NFS中的数据是可以永久保存的，同时NFS支持同时写操作。Pod被删除时，Volume被卸载，内容被保留。这就意味着NFS能够允许我们提前对数据进行处理，而且这些数据可以在Pod之间相互传递。
+
+ 
+
+4.2 演示：创建NFS存储卷
+4.2.1 在一台服务器搭建NFS
+（1）事前准备
+
+① 修改k8s集群服务的hosts文件，使之能解析nfs服务器
+
+[root@master volumes]# vim /etc/hosts
+192.168.130.103 master
+192.168.130.104 node1
+192.168.130.105 node2
+192.168.130.106 nfs
+② 在k8s集群服务器，安装nfs-utils 工具
+
+$ yum -y install nfs-utils
+
+（2）在106服务器上提供nfs服务
+
+[root@nfs ~]# yum -y install nfs-utils
+[root@nfs ~]# mkdir /data/volumes -p
+[root@nfs ~]# vim /data/volumes/index.html
+<h1>NFS stor</h1>
+[root@nfs ~]# vim /etc/exports
+/data/volumes   192.168.130.0/24(rw,no_root_squash)
+[root@nfs ~]# systemctl start nfs
+
+手动测试挂载nfs是否正常
+[root@node1 ~]#  mount 
+
+4.2.1 创建NFS存储卷
+（1）编写yaml文件，并创建
+[root@master volumes]# vim vol-nfs-demo.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vol-nfs
+  namespace: default
+spec:
+  volumes:
+  - name: html
+    nfs:
+      path: /data/volumes #挂载的路径
+      server: nfs #定义nfs主机名
+  containers:
+  - name: myapp
+    image: ikubernetes/myapp:v1
+    volumeMounts:
+    - name: html
+      mountPath: /usr/share/nginx/html/
+[root@master volumes]# kubectl apply -f vol-nfs-demo.yaml
+pod/vol-nfs created
+　　
+
+（2）验证，访问服务成功
+
+[root@master ~]# kubectl get pods -o wide
+NAME      READY     STATUS    RESTARTS   AGE       IP             NODE
+vol-nfs   1/1       Running   0          9s        10.244.1.115   node1
+[root@master ~]# curl 10.244.1.115
+<h1>NFS stor</h1>
+删除pod，再创建，也还存在数据。
+
+ 
+
+5、一些不常用的存储卷
+5.1 gitRepo
+（1）介绍
+
+gitRepo volume将git代码下拉到指定的容器路径中
+
+（2）示例
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: server
+spec:
+  volumes:
+  - name: git-volume
+    gitRepo:
+      repository: "git@github.com:alonghub/my-git-repository.git"
+     revision: "22f1d8406d464b0c0874075539c1f2e96c253775"
+  containers:
+  - name: myapp
+    image: ikubernetes/myapp:v1
+    imagePullPolicy: IfNotPresent
+    ports:
+    - name: http
+      containerPort: 80
+    volumeMounts:
+    - name: git-volume
+      mountPath: /usr/share/nginx/html/
+　　
+
+5.2 glusterfs
+　　glusterfs，允许将Glusterfs（一个开源网络文件系统）Volume安装到pod中。不同于emptyDir，Pod被删除时，Volume只是被卸载，内容被保留。味着glusterfs能够允许我们提前对数据进行处理，而且这些数据可以在Pod之间“切换”。
+
+　　注意：：必须先运行自己的GlusterFS安装，然后才能使用它。
+
+　　有关更多详细信息，请参阅GlusterFS示例。
+
+ 
+
+5.3 RBD
+　　RBD允许Rados Block Device格式的磁盘挂载到Pod中，同样的，当pod被删除的时候，rbd也仅仅是被卸载，内容保留，rbd能够允许我们提前对数据进行处理，而且这些数据可以在Pod之间“切换”。
+
+　　有关更多详细信息，请参阅RBD示例。
+
+5.4 cephfs
+　　cephfs Volume可以将已经存在的CephFS Volume挂载到pod中，与emptyDir特点不同，pod被删除的时，cephfs仅被被卸载，内容保留。cephfs能够允许我们提前对数据进行处理，而且这些数据可以在Pod之间“切换”。
+
+　　提示：可以使用自己的Ceph服务器运行导出，然后在使用cephfs。
+
+　　有关更多详细信息，请参阅CephFS示例。
+
+ kubectl explain pods.spec.volumes.persistenVolumeClain
+  kubectl explain pvc
+
+
+
+PV和PVC详解
+
+1.2 生命周期
+
+　　PV是群集中的资源。PVC是对这些资源的请求，并且还充当对资源的检查。PV和PVC之间的相互作用遵循以下生命周期：
+
+Provisioning ——-> Binding ——–>Using——>Releasing——>Recycling
+
+ 供应准备Provisioning---通过集群外的存储系统或者云平台来提供存储持久化支持。
+ - 静态提供Static：集群管理员创建多个PV。 它们携带可供集群用户使用的真实存储的详细信息。 它们存在于Kubernetes API中，可用于消费
+ - 动态提供Dynamic：当管理员创建的静态PV都不匹配用户的PersistentVolumeClaim时，集群可能会尝试为PVC动态配置卷。 此配置基于StorageClasses：PVC必须请求一个类，并且管理员必须已创建并配置该类才能进行动态配置。 要求该类的声明有效地为自己禁用动态配置。
+ 绑定Binding---用户创建pvc并指定需要的资源和访问模式。在找到可用pv之前，pvc会保持未绑定状态。
+ 使用Using---用户可在pod中像volume一样使用pvc。
+ 释放Releasing---用户删除pvc来回收存储资源，pv将变成“released”状态。由于还保留着之前的数据，这些数据需要根据不同的策略来处理，否则这些存储资源无法被其他pvc使用。
+ 回收Recycling---pv可以设置三种回收策略：保留（Retain），回收（Recycle）和删除（Delete）。
+ - 保留策略：允许人工处理保留的数据。
+ - 删除策略：将删除pv和外部关联的存储资源，需要插件支持。
+ - 回收策略：将执行清除操作，之后可以被新的pvc使用，需要插件支持。
+ 注：目前只有NFS和HostPath类型卷支持回收策略，AWS EBS,GCE PD,Azure Disk和Cinder支持删除(Delete)策略。
+
+ 
+
+1.3 PV类型
+ GCEPersistentDisk
+ AWSElasticBlockStore
+ AzureFile
+ AzureDisk
+ FC (Fibre Channel)
+ Flexvolume
+ Flocker
+ NFS
+ iSCSI
+ RBD (Ceph Block Device)
+ CephFS
+ Cinder (OpenStack block storage)
+ Glusterfs
+ VsphereVolume
+ Quobyte Volumes
+ HostPath (Single node testing only – local storage is not supported in any way and WILL NOT WORK in a multi-node cluster)
+ Portworx Volumes
+ ScaleIO Volumes
+ StorageOS
+ 
+
+1.4 PV卷阶段状态
+ Available – 资源尚未被claim使用
+ Bound – 卷已经被绑定到claim了
+ Released – claim被删除，卷处于释放状态，但未被集群回收。
+ Failed – 卷自动回收失败
+ 
+
+2、演示：创建PV
+
+2.1 准备nfs服务
+（1）在nfs服务器上先建立存储卷对应的目录
+
+[root@nfs ~]# cd /data/volumes/
+[root@nfs volumes]# mkdir v{1,2,3,4,5}
+[root@nfs volumes]# ls
+index.html  v1  v2  v3  v4  v5
+[root@nfs volumes]# echo "<h1>NFS stor 01</h1>" > v1/index.html
+[root@nfs volumes]# echo "<h1>NFS stor 02</h1>" > v2/index.html
+[root@nfs volumes]# echo "<h1>NFS stor 03</h1>" > v3/index.html
+[root@nfs volumes]# echo "<h1>NFS stor 04</h1>" > v4/index.html
+[root@nfs volumes]# echo "<h1>NFS stor 05</h1>" > v5/index.html
+　　
+
+（2）修改nfs的配置
+
+[root@nfs volumes]# vim /etc/exports
+/data/volumes/v1        192.168.130.0/24(rw,no_root_squash)
+/data/volumes/v2        192.168.130.0/24(rw,no_root_squash)
+/data/volumes/v3        192.168.130.0/24(rw,no_root_squash)
+/data/volumes/v4        192.168.130.0/24(rw,no_root_squash)
+/data/volumes/v5        192.168.130.0/24(rw,no_root_squash)
+　　
+
+（3）查看nfs的配置
+
+[root@nfs volumes]# exportfs -arv
+exporting 192.168.130.0/24:/data/volumes/v5
+exporting 192.168.130.0/24:/data/volumes/v4
+exporting 192.168.130.0/24:/data/volumes/v3
+exporting 192.168.130.0/24:/data/volumes/v2
+exporting 192.168.130.0/24:/data/volumes/v1
+　　
+
+（4）是配置生效
+
+[root@nfs volumes]# showmount -e
+Export list for nfs:
+/data/volumes/v5 192.168.130.0/24
+/data/volumes/v4 192.168.130.0/24
+/data/volumes/v3 192.168.130.0/24
+/data/volumes/v2 192.168.130.0/24
+/data/volumes/v1 192.168.130.0/24
+　　
+
+2.2 在master上创建PV
+（1）编写yaml文件，并创建pv
+
+创建5个pv，存储大小各不相同，是否可读也不相同
+
+[root@master volumes]# vim pv-damo.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv001
+  labels:
+    name: pv001
+spec:
+  nfs:
+    path: /data/volumes/v1
+    server: nfs
+  accessModes: ["ReadWriteMany","ReadWriteOnce"]
+  capacity:
+    storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv002
+  labels:
+    name: pv002
+spec:
+  nfs:
+    path: /data/volumes/v2
+    server: nfs
+  accessModes: ["ReadWriteOnce"]
+  capacity:
+    storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv003
+  labels:
+    name: pv003
+spec:
+  nfs:
+    path: /data/volumes/v3
+    server: nfs
+  accessModes: ["ReadWriteMany","ReadWriteOnce"]
+  capacity:
+    storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv004
+  labels:
+    name: pv004
+spec:
+  nfs:
+    path: /data/volumes/v4  #nfs挂载的路径
+    server: nfs
+  accessModes: ["ReadWriteMany","ReadWriteOnce"] #支持的访问模式
+  capacity:
+    storage: 10Gi  #存储空间的大小
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv005
+  labels:
+    name: pv005
+spec:
+  nfs:
+    path: /data/volumes/v5
+    server: nfs
+  accessModes: ["ReadWriteMany","ReadWriteOnce"]
+  capacity:
+    storage: 15Gi
+[root@master volumes]# kubectl apply -f pv-damo.yaml
+persistentvolume/pv001 created
+persistentvolume/pv002 created
+persistentvolume/pv003 created
+persistentvolume/pv004 created
+persistentvolume/pv005 created
+　　
+注意：有些存储不一定支持，所以要视情况定义。
+
+（2）查询验证
+
+[root@master ~]# kubectl get pv
+NAME      CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM     STORAGECLASS   REASON    AGE
+pv001     5Gi        RWO,RWX        Retain           Available                                      9s
+pv002     5Gi        RWO            Retain           Available                                      9s
+pv003     5Gi        RWO,RWX        Retain           Available                                      9s
+pv004     10Gi       RWO,RWX        Retain           Available                                      9s
+pv005     15Gi       RWO,RWX        Retain           Available                                      9s
+　　
+
+3、创建PVC，绑定PV
+（1）编写yaml文件，并创建pvc
+
+创建一个pvc，需要6G存储；所以不会匹配pv001、pv002、pv003
+
+[root@master volumes]# vim vol-pvc-demo.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mypvc
+  namespace: default
+spec:
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: 6Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vol-pvc
+  namespace: default
+spec:
+  volumes:
+  - name: html
+    persistentVolumeClaim:
+      claimName: mypvc  #指定要使用的pvc
+  containers:
+  - name: myapp
+    image: ikubernetes/myapp:v1
+    volumeMounts:
+    - name: html
+      mountPath: /usr/share/nginx/html/
+[root@master volumes]# kubectl apply -f vol-pvc-demo.yaml
+persistentvolumeclaim/mypvc created
+pod/vol-pvc created
+　　
+
+（2）查询验证：pvc已经绑定到pv004上
+
+[root@master ~]# kubectl get pvc
+NAME      STATUS    VOLUME    CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+mypvc     Bound     pv004     10Gi       RWO,RWX                       24s
+[root@master ~]# kubectl get pv
+NAME      CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM           STORAGECLASS   REASON    AGE
+pv001     5Gi        RWO,RWX        Retain           Available                                            1m
+pv002     5Gi        RWO            Retain           Available                                            1m
+pv003     5Gi        RWO,RWX        Retain           Available                                            1m
+pv004     10Gi       RWO,RWX        Retain           Bound       default/mypvc                            1m
+pv005     15Gi       RWO,RWX        Retain           Available                                            1m
+　　
+
+（3）查询业务验证
+
+[root@master ~]# kubectl get pods -o wide
+NAME      READY     STATUS    RESTARTS   AGE       IP             NODE
+vol-pvc   1/1       Running   0          59s       10.244.2.117   node2
+[root@master ~]# curl 10.244.2.117
+<h1>NFS stor 04</h1>
+
+
+
+
+https://kubernetes.io/docs/tasks/configure-pod-container/configure-projected-volume-storage/
+
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-cm-2
+  namespace: default
+  labels:
+    app: myapp
+    tier: frontend
+  annotations:
+     magedu.com/create-by: "cluster admin"
+spec:
+  containers:
+  - name: myapp
+    image: ikubernetes/myapp:v1
+    ports:
+    - name: http
+      containerPort: 80""
+    volumeMounts:
+    - name: nginxconf
+      mountPath: "/etc/nginx/conf.d/"
+      readOnly: true
+  volumes:
+    - name: config-volume
+      configMap:
+        # Provide the name of the ConfigMap containing the files you want
+        # to add to the container
+        name: special-config
+  restartPolicy: Never
+
+
+kubectl get pods
+kubectl exec -it pod-cm-3 -- /bin/sh
+
+
+
+
+# vi pod-secret-1.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-secret-1
+  namespace: default
+  labels:
+    app: myapp
+    tier: frontend
+  annotations:
+     magedu.com/create-by: "cluster admin"
+spec:
+  containers:
+  - name: myapp
+    image: ikubernetes/myapp:v1
+    ports:
+    - name: http
+      containerPort: 80
+    volumeMounts:
+    env:
+    - name: MYSQL_ROOT_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: mysql-root-password
+          key: nginx_port
+    - name: NGINX_SERVER_NAME
+      valueFrom:
+        secretKeyRef:
+        name: nginx-config
+        key: server_name
+
+# kubectl apply -f pod-secret-1.yaml
+# kubectl get pods
+可以看到密码是明文存放的。
+# kubectl exec pod-secret-1 -- printenv
