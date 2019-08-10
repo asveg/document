@@ -219,13 +219,12 @@ cp server* ca* /opt/kubernetes/ssl/
 
 4、部署etcd 存储集群
 首先我们在master上操作，即192.168.170.8
-二进制包下载地址：https://github.com/coreos/etcd/releases/tag/v3.2.12
-此处我们可以用的最新版的:3.3.9版本
-wget https://github.com/coreos/etcd/releases/download/v3.3.9/etcd-v3.3.9-linux-amd64.tar.gz
-但是我还是用的3.2版本
+二进制包下载地址：https://github.com/coreos/etcd/releases/tag/v3.3.13
+此处我们可以用的最新版的:3.3.13版本
 
-tar xvf etcd-v3.2.12-linux-amd64.tar.gz
-cd etcd-v3.2.12-linux-amd64
+wget https://github.com/coreos/etcd/releases/download/v3.3.9/etcd-v3.3.13-linux-amd64.tar.gz
+tar xvf etcd-v3.3.13-linux-amd64.tar.gz
+cd etcd-v3.3.13-linux-amd64
 
 将我们需要的可执行文件拷贝到我们自定义的地方
 
@@ -296,8 +295,8 @@ systemctl start etcd
 开机启动,查看集群状态：
 systemctl enable etcd
 ps -ef |grep etcd
-此时master上面etcd配置完毕，我们将其配置拷贝到其他2台机器上面（192.168.170.9,192.168.170.10）
 
+此时master上面etcd配置完毕，我们将其配置拷贝到其他2台机器上面（192.168.170.9,192.168.170.10）
 rsync -avzP /opt/kubernetes root@192.168.170.9:/opt/kubernetes
 rsync -avzP /opt/kubernetes root@192.168.170.10:/opt/kubernetes
 
@@ -325,7 +324,7 @@ wget https://github.com/coreos/flannel/releases/download/v0.10.0/flannel-v0.10.0
 cp flanneld mk-docker-opts.sh /opt/kubernetes/bin/
 
 配置配置文件：
-直接在命令行 将配置文件利用EOF写进去
+直接在命令行将配置文件利用EOF写进去
 
 #写flanneld配置文件
 cat <<EOF >/opt/kubernetes/cfg/flanneld
