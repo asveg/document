@@ -1,0 +1,599 @@
+Prometheus监控kubernetes
+
+一、Prometheus概述
+
+除了前面的资源指标（如CPU、内存）以外，用户或管理员需要了解更多的指标数据，比如Kubernetes指标、容器指标、节点资源指标以及应用程序指标等等。自定义指标API允许请求任意的指标，其指标API的实现要指定相应的后端监视系统。而Prometheus是第一个开发了相应适配器的监控系统。这个适用于Prometheus的Kubernetes Customm Metrics Adapter是属于Github上的kubernetes-prometheus-adapter项目提供的。其原理图如下：
+
+
+
+要知道的是prometheus本身就是一监控系统，也分为server端和agent端，server端从被监控主机获取数据，而agent端需要部署一个node_exporter，主要用于数据采集和暴露节点的数据，那么在获取Pod级别或者是mysql等多种应用的数据，也是需要部署相关的exporter。我们可以通过PromQL的方式对数据进行查询，但是由于本身prometheus属于第三方的解决方案，原生的kubernetes系统并不能对Prometheus的自定义指标进行解析，就需要借助于kubernetes-prometheus-adapter将这些指标数据查询接口转换为标准的Kubernetes自定义指标。
+
+Prometheus是一个开源的服务监控系统和时序数据库，其提供了通用的数据模型和快捷数据采集、存储和查询接口。它的核心组件Prometheus服务器定期从静态配置的监控目标或者基于服务发现自动配置的目标中进行拉取数据，新拉取到的数据大于配置的内存缓存区时，数据就会持久化到存储设备当中。Prometheus组件架构图如下：
+
+
+如上图，每个被监控的主机都可以通过专用的exporter程序提供输出监控数据的接口，并等待Prometheus服务器周期性的进行数据抓取。如果存在告警规则，则抓取到数据之后会根据规则进行计算，满足告警条件则会生成告警，并发送到Alertmanager完成告警的汇总和分发。当被监控的目标有主动推送数据的需求时，可以以Pushgateway组件进行接收并临时存储数据，然后等待Prometheus服务器完成数据的采集。
+
+任何被监控的目标都需要事先纳入到监控系统中才能进行时序数据采集、存储、告警和展示，监控目标可以通过配置信息以静态形式指定，也可以让Prometheus通过服务发现的机制进行动态管理。下面是组件的一些解析：
+    1、监控代理程序：如node_exporter：收集主机的指标数据，如平均负载、CPU、内存、磁盘、网络等等多个维度的指标数据。
+    2、kubelet（cAdvisor）：收集容器指标数据，也是kubernetes的核心指标收集，每个容器的相关指标数据包括：CPU使用率、限额、文件系统读写限额、内存使用率和限额、网络报文发送、接收、丢弃速率等等。
+    3、API Server：收集API Server的性能指标数据，包括控制队列的性能、请求速率和延迟时长等等
+    4、etcd：收集etcd存储集群的相关指标数据
+    5、kube-state-metrics：该组件可以派生出kubernetes相关的多个指标数据，主要是资源类型相关的计数器和元数据信息，包括制定类型的对象总数、资源限额、容器状态以及Pod资源标签系列等。
+
+Prometheus能够直接把KubernetesAPIServer作为服务发现系统使用进而动态发现和监控集群中的所有可被监控的对象。需要特别说明的是Pod资源需要添加下列注解信息才能被Prometheus系统自动发现并抓取其内建的指标数据。
+    1、prometheus.io/ scrape： 用于标识是否需要被采集指标数据，布尔型值，true或false。
+    2、prometheus.io/ path： 抓取指标数据时使用的URL路径，一般为/metrics。
+    3、prometheus.io/ port： 抓取指标数据时使用的套接字端口，如8080
+
+另外， 仅期望Prometheus为后端生成自定义指标时仅部署Prometheus服务器即可，它甚至也不需要数据持久功能。 但若要 配置 完整 功能 的 监控 系统， 管理员还需要在每个主机上部署node_exporter、 按需部署其他特有类型的exporter 以及 Alertmanager。
+
+k8s.gcr.io/addon-resizer:1.8.5
+
+kubernetes监控方案
+
+cadvisor+heapster+influxdb+grafana
+缺点：只能支持监控容器资源，无法支持业务监控，扩展性较差
+
+cadvisor/exporter+prometheus+grafana
+总体流程: 数据采集-->汇总-->处理-->存储-->展示
+
+容器的监控
+  （1）prometheus使用cadvisor采集容器监控指标，cadvisor集成在kubernetes的kubelet中-通过prometheus进程存储-使用grafana进行展现
+  （2）node的监控-通过node_pxporter采集当前主机的资源-通过prometheus进程存储-使用grafana进行展现
+  （3）master的监控-通过kube-state-metrics插件从kubernetes中获取到apiserver的相关数据-通过prometheus进程存储-使用grafana进行展现
+
+kubernetes监控指标
+
+kubernetes自身的监控
+  （1）node的资源利用率-node节点上的cpu、内存、硬盘、链接
+  （2）node的数量-node数量与资源利用率、业务负载的比例情况、成本、资源扩展的评估
+  （3）pod的数量-当负载到一定程度时，node与pod的数量，评估负载到哪个阶段，大约需要多少服务器，每个pod的资源  占用率如何，进行整体评估
+  （4）资源对象状态-kubernetes在运行过程中，会创建很多pod，控制器，任务，这些内容都是由kubernetes中的资源对象进行维护，需  要进行对资源对象的监控，获取资源对象的状态
+
+pod监控
+  （1）每个项目中pod的数量-正常的pod数量，有问题的pod数量
+  （2）容器资源利用率-统计当前pod的资源利用率，统计pod中的容器资源利用率，cpu、网络、内存评估
+  （3）应用程序-项目中的程序的自身情况，如并发，请求响应，项目用户数量，订单数等
+
+实现思路
+
+监控指标        具体实现                    举例
+pod性能         cadvisor               容器的cpu、内存利用率
+node性能        node-exporter          node节点的cpu、内存利用率
+kubernetes资源对象     kube-state-metrics     pod/deployment/service
+
+服务发现
+从kubernetes的api中去发现抓取的目标，并始终与kubernetes集群状态保持一致，
+动态的获取被抓取的目标，实时的从api中获取当前状态是否存在，
+
+官方文档
+https://prometheus.io/docs/prometheus/latest/configuration/configuration/#kubernetes_sd_config
+
+自动发现支持的组件：
+    node-自动发现集群中的node节点
+    pod-自动发现运行的容器和端口
+    service-自动发现创建的serviceIP、端口
+    endpoints-自动发现pod中的容器
+    ingress-自动发现创建的访问入口和规则
+
+二、kubernetes部署prometheus
+
+官方部署文档: https://github.com/kubernetes/kubernetes/tree/master/cluster/addons/prometheus
+
+制作prometheus PV/PVC
+
+nfs-server storage 192.168.170.22
+nfs-client node2   192.168.170.9
+nfs-client node3   192.168.170.10
+
+#安装依赖包
+yum -y install nfs-utils rpcbind
+
+#开机启动
+systemctl enable rpcbind.service 
+systemctl enable nfs-server.service
+systemctl start rpcbind.service #端口是111
+systemctl start nfs-server.service # 端口是2049 
+
+# 创建一个/data/k8s的共享目录
+# mkdir /data/k8s
+# chown nfsnobody:nfsnobody /data/k8s
+# cat /etc/exports
+/data/k8s 192.168.170.0/24(rw,async,all_squash)
+# exportfs -rv
+exporting 192.168.170.0/24:/data/k8s
+
+创建名称空间prom
+[root@kubernetes-master ~]# git clone https://github.com/iKubernetes/kubernetes-prom.git && cd kubernetes-prom
+[root@kubernetes-master kubernetes-prom]# kubectl apply -f namespace.yaml 
+namespace/prom created
+
+
+下载prometheus yaml部署文件
+mkdir /data/kubernetes/prometheus
+cd /data/kubernetes/prometheus/
+
+# 从github官网下载yaml部署文件
+curl -O https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/addons/prometheus/prometheus-rbac.yaml
+curl -O https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/addons/prometheus/prometheus-configmap.yaml
+curl -O https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/addons/prometheus/prometheus-service.yaml
+curl -O https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/addons/prometheus/prometheus-statefulset.yaml
+
+修改prometheus-statefulset.yaml
+# 删掉最下面的10行
+  volumeClaimTemplates:
+  - metadata:
+      name: prometheus-data
+    spec:
+      storageClassName: standard
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: "10Gi"
+
+# 新增下面3行
+        - name: prometheus-data
+          persistentVolumeClaim:  
+            claimName: prometheus-data
+
+创建pv/pvc文件
+
+在nfs服务器创建prometheus，修改目录权限
+mkdir /data/k8s/prometheus
+chown nfsnobody. /data/k8s/prometheus
+
+cat > prometheus-pvc-data.yaml << EFO
+#创建PV
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: prometheus-data
+spec:
+  storageClassName: prometheus-data
+  capacity: 
+    storage: 10Gi  
+  accessModes: 
+    - ReadWriteOnce  
+  persistentVolumeReclaimPolicy: Recycle 
+  nfs:
+    path: /data/k8s/prometheus  #指定nfs挂载路径
+    server: 192.168.170.22   #指定nfs-server ip
+
+---
+#创建pvc
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: kube-system  
+spec:
+  accessModes:
+    - ReadWriteOnce 
+  resources:
+    requests:
+      storage: 10Gi 
+  storageClassName: prometheus-data
+EFO
+
+创建Prometheus-ingress.yaml文件，主要是为了外部grafana使用
+
+cat > prometheus-ingress.yaml << EFO
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: prometheus-ingress
+  namespace: kube-system
+spec:
+  rules:
+  - host: prometheus.test.com
+    http:
+      paths:
+      - backend:
+          serviceName: prometheus
+          servicePort: 9090
+EFO
+
+应用yaml文件
+# 部署顺序
+prometheus-rbac.yaml -对prometheus访问kube-apiserver进行授权
+prometheus-configmap.yaml -管理prometheus主配置文件
+prometheus-service.yaml -将prometheus暴露出去，可以访问
+prometheus-ingress.yaml -对外提供服务
+prometheus-pvc-data.yaml -为pod提供数据存储
+prometheus-statefulset.yaml -通过有状态的形式，将prometheus去部署
+prometheus-ingress.yaml -对外提供服务
+
+# 应用yaml文件
+kubectl apply -f prometheus-rbac.yaml 
+kubectl apply -f prometheus-configmap.yaml 
+kubectl apply -f prometheus-ingress.yaml
+kubectl apply -f prometheus-pvc-data.yaml
+kubectl apply -f prometheus-service.yaml
+kubectl apply -f prometheus-statefulset.yaml
+
+# 查看部署情况
+[root@master prometheus]# kubectl get pv
+NAME              CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                         STORAGECLASS      REASON   AGE
+prometheus-data   10Gi       RWO            Recycle          Bound    kube-system/prometheus-data   prometheus-data            32m
+
+[root@master prometheus]# kubectl get pvc -n kube-system 
+NAME              STATUS   VOLUME            CAPACITY   ACCESS MODES   STORAGECLASS      AGE
+prometheus-data   Bound    prometheus-data   10Gi       RWO            prometheus-data   33m
+
+[root@master prometheus]# kubectl get service -n kube-system 
+NAME         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+kube-dns     ClusterIP   10.10.10.2      <none>        53/UDP,53/TCP    12d
+prometheus   NodePort    10.107.69.131   <none>        9090/TCP   57m
+
+[root@master prometheus]# kubectl get statefulsets.apps  -n kube-system 
+NAME         READY   AGE
+prometheus   1/1     15m
+
+[root@master prometheus]# kubectl get ingresses.extensions -n kube-system 
+NAME                 HOSTS                       ADDRESS   PORTS   AGE
+prometheus-ingress   prometheus.test.com             80      7m3s
+
+[root@master prometheus]# kubectl get pods -n kube-system  -o wide |grep prometheus
+NAME                             READY   STATUS    RESTARTS   AGE   IP              NODE     NOMINATED NODE   READINESS GATES
+prometheus-0                     2/2     Running   0          42s   10.244.1.6      node02   <none>           <none>
+
+访问ingress
+
+# 修改hosts文件,添加ingress域名解析
+192.168.170.9 prometheus.test.com
+
+然后浏览器 http://prometheus.test.com/graph
+
+三、部署node-exporter
+
+下载yaml文件
+
+curl -O https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/addons/prometheus/node-exporter-ds.yml
+curl -O https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/addons/prometheus/node-exporter-service.yaml
+由于我们要获取到的数据是主机的监控指标数据，而我们的node-exporter是运行在容器中的，所以我们在Pod中需要配置一些Pod的安全策略，这里我们就添加了hostPID: true、hostIPC: true、hostNetwork: true3个策略，用来使用主机的 PID namespace、IPC namespace 以及主机网络，这些 namespace 就是用于容器隔离的关键技术，要注意这里的namespace和集群中的namespace是两个完全不相同的概念。
+
+另外我们还将主机的/dev、/proc、/sys这些目录挂载到容器中，这些因为我们采集的很多节点数据都是通过这些文件夹下面的文件来获取到的，比如我们在使用top命令可以查看当前cpu使用情况，数据就来源于文件/proc/stat，使用free命令可以查看当前内存使用情况，其数据来源是来自/proc/meminfo文件。
+
+如果集群使用kubeadm搭建的，希望master节点也一起被监控，则需要添加响应的容忍。我这里是二进制部署的，所以略过此步骤。
+
+// 修改node-exporter-ds.yml文件
+添加配置如下：
+    spec:
+      hostPID: true 
+      hostIPC: true
+      hostNetwork: true
+      
+      tolerations:
+      - key: "node-role.kubernetes.io/master"
+        operator: "Exists"
+        effect: "NoSchedule"
+        
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: dev
+          hostPath:
+            path: /dev
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: rootfs
+          hostPath:
+            path: /
+
+应用配置文件
+kubectl apply -f node-exporter-service.yaml
+kubectl apply -f node-exporter-ds.yml 
+
+# 查看部署情况
+[root@master prometheus]# kubectl get pods -n kube-system |grep node-export 
+node-exporter-lb7gb              1/1     Running   0          4m59s
+node-exporter-q22zn              1/1     Running   0          4m59s
+
+[root@master prometheus]# kubectl get service -n kube-system |grep node-export      
+node-exporter   ClusterIP   None            <none>        9100/TCP        5m49s
+
+查看Prometheus是否获取到数据
+浏览器输入：http://prometheus.test.com/graph
+
+三、部署kube-state-metrics
+
+下载yaml文件
+curl -O https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/addons/prometheus/kube-state-metrics-service.yaml
+curl -O https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/addons/prometheus/kube-state-metrics-rbac.yaml
+curl -O https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/addons/prometheus/kube-state-metrics-deployment.yaml
+
+应用yaml文件
+kubectl apply -f kube-state-metrics-service.yaml
+kubectl apply -f kube-state-metrics-rbac.yaml
+kubectl apply -f kube-state-metrics-deployment.yaml
+
+四、部署grafana
+
+在nfs-server上创建目录并修改权限
+mkdir /data/k8s/prometheus-grafana 
+chown nfsnobody. /data/k8s/prometheus-grafana
+
+生成yaml文件grafana-pvc.yaml
+
+cat > grafana-pvc.yaml << EFO
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: prometheus-grafana
+spec:
+  storageClassName: prometheus-grafana
+  capacity: 
+    storage: 2Gi  
+  accessModes: 
+    - ReadWriteOnce  
+  persistentVolumeReclaimPolicy: Recycle 
+  nfs:
+    path: /data/k8s/prometheus-grafana
+    server: 192.168.170.22
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-grafana
+  namespace: kube-system  
+spec:
+  accessModes:
+    - ReadWriteOnce 
+  resources:
+    requests:
+      storage: 2Gi 
+  storageClassName: prometheus-grafana
+EFO
+grafana-ingress.yaml
+cat > grafana-ingress.yaml << EFO
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+   name: grafana
+   namespace: kube-system
+spec:
+   rules:
+   - host: grafana.test.com
+     http:
+       paths:
+       - path: /
+         backend:
+          serviceName: grafana
+          servicePort: 3000
+EFO          
+
+# cat > grafana-deployment.yaml << EFO
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: kube-system
+  labels:
+    app: grafana
+spec:
+  revisionHistoryLimit: 10
+  template:
+    metadata:
+      labels:
+        app: grafana
+        component: prometheus
+    spec:
+      containers:
+      - name: grafana
+        env:
+        - name: GF_SECURITY_ADMIN_USER
+          value: admin
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: admin
+        image: private.winchannel.net/google_containers/grafana:5.3.0  #这个要科学上网才能下载，否则会报错。
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3000
+          name: grafana
+        readinessProbe:
+          failureThreshold: 10
+          httpGet:
+            path: /api/health
+            port: 3000
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 30
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/health
+            port: 3000
+            scheme: HTTP
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: 100m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+        volumeMounts:
+        - mountPath: /var/lib/grafana
+          subPath: grafana
+          name: grafana-volumes
+      volumes:
+      - name: grafana-volumes
+        persistentVolumeClaim:
+          claimName: prometheus-grafana
+EFO
+
+部署yaml文件
+kubectl apply -f grafana-pvc.yaml
+kubectl apply -f grafana-ingress.yaml
+kubectl apply -f grafana-deployment.yaml
+
+# 查看部署情况
+[root@master prometheus]# kubectl get service -n kube-system |grep grafana
+grafana              ClusterIP   10.105.159.132   <none>        3000/TCP            150m
+
+[root@master prometheus]# kubectl get ingresses.extensions -n kube-system |grep grafana       
+grafana              grafana.test.com                80      150m
+
+[root@master prometheus]# kubectl get pods -n kube-system |grep grafana                     
+grafana-6f6d77d98d-wwmbd              1/1     Running   0          53m
+配置grafana
+修改本地hosts文件添加ingress域名解析,然后访问 http://grafana.test.com
+
+
+五、部署alertmanager
+
+下载yaml文件
+curl -O https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/addons/prometheus/alertmanager-pvc.yaml
+curl -O https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/addons/prometheus/alertmanager-service.yaml
+curl -O https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/addons/prometheus/alertmanager-deployment.yaml
+curl -O https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/addons/prometheus/alertmanager-configmap.yaml
+
+
+#在nfs-server创建文件夹并修改权限
+
+mkdir /data/k8s/prometheus-alertmanager   
+chown nfsnobody. /data/k8s/prometheus-alertmanager 
+
+修改yaml文件alertmanager-pvc.yaml
+cat > alertmanager-pvc.yaml  << EFO
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: prometheus-alertmanager
+spec:
+  storageClassName: prometheus-alertmanager
+  capacity: 
+    storage: 2Gi  
+  accessModes: 
+    - ReadWriteOnce  
+  persistentVolumeReclaimPolicy: Recycle 
+  nfs:
+    path: /data/k8s/prometheus-alertmanager
+    server: 192.168.170.22
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-alertmanager
+  namespace: kube-system  
+spec:
+  accessModes:
+    - ReadWriteOnce 
+  resources:
+    requests:
+      storage: 2Gi 
+  storageClassName: prometheus-alertmanager
+EFO
+
+修改alertmanager-deployment.yaml文件，最后一行的claimName
+        - name: storage-volume
+          persistentVolumeClaim:
+            claimName: prometheus-alertmanager
+
+应用yaml文件
+kubectl apply -f alertmanager-pvc.yaml
+kubectl apply -f alertmanager-configmap.yaml
+kubectl apply -f alertmanager-service.yaml
+kubectl apply -f alertmanager-deployment.yaml
+
+# 查看部署情况
+[root@master prometheus-inkubernetes]# kubectl get all -n kube-system  |grep alertmanager
+pod/alertmanager-c564cb9fc-bfrvb          2/2     Running   0          71s
+service/alertmanager         ClusterIP   10.102.208.66   <none>        80/TCP              5m44s
+deployment.apps/alertmanager         1/1     1            1           71s
+replicaset.apps/alertmanager-c564cb9fc          1         1         1       71s
+
+
+创建告警规则
+
+// 修改prometheus-configmap.yaml文件
+# kubectl edit configmaps prometheus-config -n kube-system 
+
+// 在prometheus.yml: | 下面添加
+    alerting:
+      alertmanagers:
+      - static_configs:
+        - targets:
+          - alertmanager:80
+    rule_files:
+    - "/etc/config/rules.yml"
+
+// 创建告警规则, 在最下面添加
+  rules.yml: |
+    groups:
+    - name: example
+      rules:
+      - alert: InstanceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: "Instance {{ $labels.instance }} down"
+          description: "{{ $labels.instance }} of job {{ $labels.job }} has been down for more than 1 minutes."
+      - alert: NodeMemoryUsage
+        expr: (sum(node_memory_MemTotal) - sum(node_memory_MemFree+node_memory_Buffers+node_memory_Cached) ) / sum(node_memory_MemTotal) * 100 > 20
+        for: 2m
+        labels:
+          team: node
+        annotations:
+          summary: "{{$labels.instance}}: High Memory usage detected"
+          description: "{{$labels.instance}}: Memory usage is above 20% (current value is: {{ $value }}"
+
+//  重载配置文件
+# kubectl apply -f prometheus-configmap.yaml
+# kubectl get service -n kube-system |grep prometheus
+prometheus           ClusterIP   10.111.97.89    <none>        9090/TCP            4h42m
+# curl -X POST http://10.111.97.89:9090/-/reload
+
+创建邮件告警
+# 修改alertmanager-configmap.yaml文件
+
+cat > alertmanager-configmap.yaml  << EFO
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: kube-system
+  labels:
+    kubernetes.io/cluster-service: "true"
+    addonmanager.kubernetes.io/mode: EnsureExists
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 3m #解析的超时时间
+      smtp_smarthost: 'smtp.163.com:25'
+      smtp_from: 'wang_jinhuai@163.com'
+      smtp_auth_username: 'wang_jinhuai@163.com'
+      smtp_auth_password: '394056abc'
+      smtp_require_tls: false
+    
+    route:
+      group_by: ['example']
+      group_wait: 60s
+      group_interval: 60s
+      repeat_interval: 12h
+      receiver: 'mail'
+    
+    receivers:
+    - name: 'mail'
+      email_configs:
+      - to: 'wang_jinhuai@163.com'
+        send_resolved: true
+EFO
+
+重新应用yaml文件
+kubectl delete configmaps -n kube-system alertmanager-config 
+kubectl apply  -f alertmanager-configmap.yaml 
+
+查看告警
+访问Prometheus, 查看是否有alerts告警规则
