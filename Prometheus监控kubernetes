@@ -80,11 +80,14 @@ https://prometheus.io/docs/prometheus/latest/configuration/configuration/#kubern
 
 官方部署文档: https://github.com/kubernetes/kubernetes/tree/master/cluster/addons/prometheus
 
-制作prometheus PV/PVC
+实验环境：
 
 nfs-server storage 192.168.170.22
+nfs-client master  192.168.170.8
 nfs-client node2   192.168.170.9
 nfs-client node3   192.168.170.10
+
+制作prometheus PV/PVC
 
 #安装依赖包
 yum -y install nfs-utils rpcbind
@@ -103,15 +106,24 @@ systemctl start nfs-server.service # 端口是2049
 # exportfs -rv
 exporting 192.168.170.0/24:/data/k8s
 
-创建名称空间prom
-[root@kubernetes-master ~]# git clone https://github.com/iKubernetes/kubernetes-prom.git && cd kubernetes-prom
-[root@kubernetes-master kubernetes-prom]# kubectl apply -f namespace.yaml 
-namespace/prom created
+
 
 
 下载prometheus yaml部署文件
 mkdir /data/kubernetes/prometheus
 cd /data/kubernetes/prometheus/
+
+创建名称空间kube-system
+# cat << EFO > namesapce.yaml 
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kube-system
+EFO
+
+# kubectl apply -f namespace.yaml 
+
 
 # 从github官网下载yaml部署文件
 curl -O https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/addons/prometheus/prometheus-rbac.yaml
