@@ -606,15 +606,14 @@ systemctl restart kube-apiserver
 其中 192.168.170.8 代表master ip,https://192.168.170.8:2379,https://192.168.170.9:2379,https://192.168.170.10:2379代表枚举ip
 
 安装：controller-manager
-编写安装脚本：
 
+编写安装脚本：
 [root@master master_pkg]# cat controller-manager.sh
 #!/bin/bash
 
 MASTER_ADDRESS=${1:-"127.0.0.1"}
 
 cat <<EOF >/opt/kubernetes/cfg/kube-controller-manager
-
 
 KUBE_CONTROLLER_MANAGER_OPTS="--logtostderr=true \\
 --v=4 \\
@@ -627,7 +626,6 @@ KUBE_CONTROLLER_MANAGER_OPTS="--logtostderr=true \\
 --cluster-signing-key-file=/opt/kubernetes/ssl/ca-key.pem  \\
 --service-account-private-key-file=/opt/kubernetes/ssl/ca-key.pem \\
 --root-ca-file=/opt/kubernetes/ssl/ca.pem"
-
 EOF
 
 cat <<EOF >/usr/lib/systemd/system/kube-controller-manager.service
@@ -778,12 +776,11 @@ systemctl daemon-reload
 systemctl enable kubelet
 systemctl restart kubelet
 
-
 执行脚本安装：
 
 sh ./kubelet.sh 192.168.170.9 10.10.10.2
 
-启动出错查看：/var/log/message
+启动出错查看：tail -f /var/log/message
 
 安装kube-proxy：
 编写安装脚本：
@@ -824,13 +821,13 @@ systemctl restart kube-proxy
 sh ./proxy.sh 192.168.170.9
 ps aux |grep proxy
 
-报错查看：/var/log/messages
+报错查看：
+tail -f /var/log/messages
 journalctl -f -t kube-proxy     
 journalctl -u kube-proxy
 
 node02没有出错的话我们就去node03上操作（192.168.170.10）
-同样的操作：
-只是将脚本里面对应的ip改成本机ip
+同样的操作：只是将脚本里面对应的ip改成本机ip
 
 ./kubelet.sh 192.168.170.10 10.10.10.2
 ./proxy.sh 192.168.170.10
@@ -842,7 +839,6 @@ node02没有出错的话我们就去node03上操作（192.168.170.10）
 NAME                                                   AGE       REQUESTOR           CONDITION
 node-csr-0EfKRr3ZU_UVFi5O8XLASGNxTzMrIsxMHg8oHJnY3JA   4m        kubelet-bootstrap   Pending
 node-csr-MTGLph0ohPwDJK6FtjJagnkjo3utvYjL1N52nBA1xRU   43m       kubelet-bootstrap   Pending
-
 可以看到，节点是处于等待状态
 
 我们查看节点接入情况：
@@ -850,20 +846,16 @@ node-csr-MTGLph0ohPwDJK6FtjJagnkjo3utvYjL1N52nBA1xRU   43m       kubelet-bootstr
 No resources found.
 
 目前没有节点加入，我们将节点加入：
-
 kubectl certificate approve node-csr-0EfKRr3ZU_UVFi5O8XLASGNxTzMrIsxMHg8oHJnY3JA
 kubectl certificate approve node-csr-MTGLph0ohPwDJK6FtjJagnkjo3utvYjL1N52nBA1xRU
 
 稍等片刻，我们发现节点已经加入进来：
-
 [root@master ~]#  kubectl get node
 NAME             STATUS     ROLES     AGE       VERSION
 192.168.170.9    NotReady   <none>    2s         v1.15.0
 192.168.170.10   Ready      <none>    1m         v1.15.0
 
-
 查看集群状态：( kubectl get componentstatus)
-
 [root@master ~]#  kubectl get cs
 NAME                 STATUS    MESSAGE              ERROR
 controller-manager   Healthy   ok
@@ -873,7 +865,6 @@ etcd-2               Healthy   {"health": "true"}
 etcd-0               Healthy   {"health": "true"}
 --------------------- 
  
-
 测试用例
 查看集群状态：
 [root@master ~]# kubectl get cs
@@ -890,7 +881,6 @@ etcd-1               Healthy   {"health": "true"}
  kubectl run nginx --image=nginx --replicas=3
 
 查看运行的容器状态
-
 [root@master ~]#  kubectl get pod
 NAME                   READY     STATUS    RESTARTS   AGE
 nginx-8586cf59-57z8r   1/1       Running   0          8m
@@ -898,7 +888,6 @@ nginx-8586cf59-95ld2   1/1       Running   0          8m
 nginx-8586cf59-w9g6q   1/1       Running   0          8m
 
 查看运行的容器在集群中的节点信息：
-
 [root@master ~]# kubectl get pod -o wide
 NAME                   READY     STATUS    RESTARTS   AGE       IP            NODE
 nginx-8586cf59-57z8r   1/1       Running   0          36m       172.17.96.3   192.168.170.10
@@ -906,22 +895,18 @@ nginx-8586cf59-95ld2   1/1       Running   0          36m       172.17.41.3   19
 nginx-8586cf59-w9g6q   1/1       Running   0          36m       172.17.96.2   192.168.170.10
 
 将容器的端口暴露出来
-
 kubectl expose deployment nginx --port=88 --target-port=80 --type=NodePort
 
 查看容器的ip与端口
-
 [root@master ~]# kubectl get svc nginx
 NAME      TYPE       CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
 nginx     NodePort   10.10.10.106   <none>        88:31721/TCP   23m
 
-此时我们可以在node节点通过
-curl 10.10.10.106:88 来访问
+此时我们可以在node节点通过curl 10.10.10.106:88 来访问
 
 浏览器访问：192.168.170.9/8:31721 都能访问
 
 如果不能访问看看自己的网络是否正常或者其它原因导致无法正常访问，需要一步步排查错误。
-
 cd /opt/kubernetes/ssl
 [root@master ssl]# /opt/kubernetes/bin/etcdctl --ca-file=ca.pem --cert-file=server.pem --key-file=server-key.pem --endpoints="https://192.168.170.8:2379,https://192.168.170.9:2379,https://192.168.170.10:2379" ls /coreos.com/network/subnets
 /coreos.com/network/subnets/172.17.98.0-24
