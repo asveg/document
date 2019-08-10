@@ -128,6 +128,7 @@ cat > server-csr.json <<EOF
       "192.168.170.8",
       "192.168.170.9",
       "192.168.170.10",
+      "10.10.10.1",  #这个是dns用的ip地址，不添加dns Pod起不来。
       "kubernetes",
       "kubernetes.default",
       "kubernetes.default.svc",
@@ -357,17 +358,14 @@ EOF
 
 #写入分配的子网段到etcd，供flanneld使用
 cd /opt/kubernetes/ssl
-
 /opt/kubernetes/bin/etcdctl --ca-file=ca.pem --cert-file=server.pem --key-file=server-key.pem --endpoints="https://192.168.170.8:2379,https://192.168.170.9:2379,https://192.168.170.10:2379" set /coreos.com/network/config '{ "Network": "172.17.0.0/16", "Backend": {"Type": "vxlan"}}'
 
 测试：
-
 /opt/kubernetes/bin/etcdctl --ca-file=ca.pem --cert-file=server.pem --key-file=server-key.pem --endpoints="https://192.168.170.8:2379,https://192.168.170.9:2379,https://192.168.170.10:2379" get /coreos.com/network/config
 
 systemctl enable flanneld
-  
-
-如果报错请查看：/var/log/message
+ 
+如果报错请查看：tail -f /var/log/message
 
 查看flanneld分配的网络：
 
@@ -406,7 +404,7 @@ EOF
 systemctl daemon-reload
 systemctl restart docker
 
-查看ifconfig 中 会出现一个flannel 网络，并且flannel和docker0 网络段会相同
+查看ifconfig 中会出现一个flannel 网络，并且flannel和docker0 网络段会相同
 
 设置完成后将配置文件分发到node02,和node03上即192.168.170.9和192.168.170.10
 
@@ -519,13 +517,9 @@ sh -x kubeconfig.sh
 参考地址：https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG-1.10.md#v1107
 
 8、运行Master组件
-1.10包地址：
-
-wget https://dl.k8s.io/v1.15.0/kubernetes-server-linux-amd64.tar.gz
-我们先在master（192.168.170.8）上操作
-
-master需要三个组件：kube-apiserver kube-controller-manager kube-scheduler
-我们将其拿出来 放入指定目录：
+1.15包地址：wget https://dl.k8s.io/v1.15.0/kubernetes-server-linux-amd64.tar.gz
+我们先在master（192.168.170.8）上操作master需要三个组件：kube-apiserver kube-controller-manager kube-scheduler
+我们将其拿出来放入指定目录：
 
 tar xvf kubernetes-server-linux-amd64.tar.gz
 cp kubernetes/server/bin/kube-scheduler ./
@@ -608,11 +602,8 @@ systemctl daemon-reload
 systemctl enable kube-apiserver
 systemctl restart kube-apiserver
 
-
 执行脚本：
-
 ./apiserver.sh 192.168.170.8 https://192.168.170.8:2379,https://192.168.170.9:2379,https://192.168.170.10:2379
-
 其中 192.168.170.8 代表master ip,https://192.168.170.8:2379,https://192.168.170.9:2379,https://192.168.170.10:2379代表枚举ip
 
 安装：controller-manager
@@ -658,8 +649,7 @@ systemctl daemon-reload
 systemctl enable kube-controller-manager
 systemctl restart kube-controller-manager
 
-执行脚本安装启动：
-
+执行脚本安装启动并查看进程是否启动：
 ./controller-manager.sh 127.0.0.1
 ps aux |grep controller-manager
 
@@ -698,13 +688,11 @@ systemctl daemon-reload
 systemctl enable kube-scheduler
 systemctl restart kube-scheduler
 
-执行脚本安装启动：
-
+执行脚本安装启动并查看进程是否启动：
 ./scheduler.sh 127.0.0.1
 ps aux |grep scheduler
 
 到这里我们可以测试集群大概状态了
-
 [root@master master_pkg]# kubectl get cs
 NAME                 STATUS    MESSAGE              ERROR
 scheduler            Healthy   ok
