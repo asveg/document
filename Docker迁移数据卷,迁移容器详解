@@ -1,0 +1,72 @@
+Docker迁移数据卷,迁移容器详解(测试通过)
+
+ 
+接下来的操作根据mongoDB数据库的迁移举例!
+
+一 查看当前mongo容器挂载的数据卷, 找到容器数据卷信息
+docker inspect mongo
+
+Mounts属性就是告诉我们容器相关的数据卷信息 :
+
+"Mounts": [
+        {
+            "Type": "volume",
+            "Name": "64fc04261571782d92a7e9b486f3876b7713c24c57ba08a3406b36ee2356ca6e",
+            "Source": "/var/lib/docker/volumes/64fc04261571782d92a7e9b486f3876b7713c24c57ba08a3406b36ee2356ca6e/_data",
+            "Destination": "/data/configdb",
+            "Driver": "local",
+            "Mode": "",
+            "RW": true,
+            "Propagation": ""
+        },
+        {
+            "Type": "volume",
+            "Name": "mongo_data_yapi",
+            "Source": "/var/lib/docker/volumes/mongo_data_yapi/_data",
+            "Destination": "/data/db",
+            "Driver": "local",
+            "Mode": "z",
+            "RW": true,
+            "Propagation": ""
+        }
+二 备份单个数据卷(结尾会讲如何备份多个数据卷)
+docker run -i -t --volumes-from mongo-yapi -v $(pwd):/backup mongo tar cvf /backup/backupdata.tar /data/db
+
+相关option说明:
+    --volumes-from : 表示引用哪个容器的数据卷
+    $(pwd) : 获取当前目录路径
+    backup : 执行备份指令
+    tar /backup/backupdata.tar /data/db : 打包容器内需保留的数据目录
+
+三 备份后的数据转移到新服务器后恢复单个数据卷
+转移过程省略, ftp一键传过去即可
+
+docker run -itd -v /data/db --name data1 mongo /bin/bash
+创建临时容器用空目录映射到之前要保留的数据目录下, 切记-v 后不要创建数据卷映射到容器目录, 要保证目录的干净完整以便于等会儿恢复数据不会再遭遇未知的bug
+
+docker run --rm --volumes-from data1 -v $(pwd):/backup mongo tar xvf /backup/backupdata.tar 
+创建临时容器恢复数据卷到刚刚创建的新容器data1中, --rm 属性会在执行完后立即删除该容器
+
+四 引用临时容器数据卷正式安装mongo
+
+docker inspect data1
+查询上一步创建的临时容器data1的数据卷
+
+docker run -d --name mongo-yapi -v mongo_data_yapi:/data/db mongo
+引用临时容器数据卷构建新的容器, 搞定后删除临时容器即可! 此时运行已经成功了。
+
+Final补充 : 备份及恢复多个数据卷
+
+1> 备份多个数据卷
+docker run -tid --rm --volumes-from mongo-yapi -v $(pwd):/backup mongo tar cvf /backup/backup.tar /var/volume1 /var/volume2
+/var/volume1 /var/volume2 即容器内映射的两个目录
+
+2> 创建临时容器及恢复多个数据卷
+docker run -tid -v /data/db -v /data/configdb --name data1 mongo /bin/bash
+ 
+docker run --rm --volumes-from data1 -v $(pwd):/backup mongo tar xvf /backup/backup.tar -C /
+/data/configdb
+/data/db
+
+相关option说明:
+    -C 属性是根据备份好的打包数据指定好同样的的映射到容器内的目录
