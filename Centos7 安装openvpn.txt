@@ -1,0 +1,254 @@
+Centos7 安装openvpn by easy-rsa3.0
+
+安装openvpn等所需要的软件
+首先你必须有一个公网ip，否则一切都是空谈
+yum install -y epel-release
+yum install -y openvpn easy-rsa openssl openssl-devel lzo lzo-devel pam pam-devel automake pkgconfig
+
+server端 制作证书，密钥等文件
+CA证书生产
+
+[root@localhost ~]# cp /usr/share/doc/openvpn-2.4.7/sample/sample-config-files/server.conf /etc/openvpn/      //复制服务端配置文件到配置文件目录
+[root@localhost ~]# mkdir /etc/openvpn/easy-rsa
+[root@localhost ~]# cp -r /usr/share/easy-rsa/3.0.3/* /etc/openvpn/easy-rsa/
+[root@localhost ~]# cd /etc/openvpn/easy-rsa/
+[root@localhost easy-rsa]# cp /usr/share/doc/easy-rsa-3.0.3/vars.example var
+[root@localhost easy-rsa]# ls
+easyrsa  openssl-1.0.cnf  var  x509-types
+[root@localhost easy-rsa]#vim vars        #×××的相关配置，根据需要自定义，也可以忽略不设置
+ 
+set_var EASYRSA_REQ_COUNTRY     "CN"                             #国家
+set_var EASYRSA_REQ_PROVINCE    "BJ"                             #省
+set_var EASYRSA_REQ_CITY        "Beijing"                        #城市
+set_var EASYRSA_REQ_ORG         "My ***"                         #组织
+set_var EASYRSA_REQ_EMAIL       "disk@skyii.com"                 #邮箱
+set_var EASYRSA_REQ_OU          "sky"                            #公司、组织
+
+[root@localhost easy-rsa]# ./easyrsa init-pki                                        #初始化pki，生成目录文件结构
+init-pki complete; you may now create a CA or requests.
+your newly created PKI dir is: /etc/openvpn/easy-rsa/pki
+[root@localhost easy-rsa]# ls
+easyrsa  openssl-1.0.cnf  pki  var  x509-types
+
+
+[root@localhost easy-rsa]# ./easyrsa build-ca              #创建ca证书
+Note: using Easy-RSA configuration from: ./vars                                  #使用vars文件里面配置的信息
+Generating a 2048 bit RSA private key
+.................+++
+........................................................................................+++
+writing new private key to '/etc/openvpn/easy-rsa/pki/private/ca.key.Lg8IKADc4Q'
+Enter PEM pass phrase:                                                                      #设置ca密码(我此处是写的silence)
+Verifying - Enter PEM pass phrase:                                                     #再输一遍上面的密码
+-----
+You are about to be asked to enter information that will be incorporated
+into your certificate request.
+What you are about to enter is what is called a Distinguished Name or a DN.
+There are quite a few fields but you can leave some blank
+For some fields there will be a default value,
+If you enter '.', the field will be left blank.
+-----
+Common Name (eg: your user, host, or server name) [Easy-RSA CA]:         #直接回车，就是默认的CA作为名字
+CA creation complete and you may now import and sign cert requests.
+Your new CA certificate file for publishing is at:
+/etc/openvpn/easy-rsa/pki/ca.crt                    #ca证书存放路径
+
+服务端证书server.crt
+
+[root@localhost easy-rsa]# ./easyrsa gen-req server nopass          #nopass设置免证书密码，如果要设置密码可以取消此参数选项
+Note: using Easy-RSA configuration from: ./vars                             #使用vars文件里面配置的信息
+Generating a 2048 bit RSA private key
+.....................................+++
+................................................................................................+++
+writing new private key to '/etc/openvpn/easy-rsa/pki/private/server.key.yuG9HRsSlU'
+-----
+You are about to be asked to enter information that will be incorporated
+into your certificate request.
+What you are about to enter is what is called a Distinguished Name or a DN.
+There are quite a few fields but you can leave some blank
+For some fields there will be a default value,
+If you enter '.', the field will be left blank.
+-----
+Common Name (eg: your user, host, or server name) [server]:                     #直接回车，默认名字为server
+Keypair and certificate request completed. Your files are:
+req: /etc/openvpn/easy-rsa/pki/reqs/server.req
+key: /etc/openvpn/easy-rsa/pki/private/server.key  #密钥key的路径
+
+
+证书签名
+
+[root@localhost easy-rsa]# ./easyrsa sign server server                    #第二个server是只上面服务端证书的CN名字，我们用的默认server,随便写
+ 
+Note: using Easy-RSA configuration from: ./vars
+ 
+You are about to sign the following certificate.
+Please check over the details shown below for accuracy. Note that this request
+has not been cryptographically verified. Please be sure it came from a trusted
+source or that you have verified the request checksum with the sender.
+ 
+Request subject, to be signed as a server certificate for 3650 days:
+ 
+subject=
+    commonName                = server
+ 
+Type the word 'yes' to continue, or any other input to abort.
+  Confirm request details: yes
+Using configuration from ./openssl-1.0.cnf
+Enter pass phrase for /etc/openvpn/easy-rsa/pki/private/ca.key:            #输入上面ca证书生成时的密码（silence）
+Check that the request matches the signature
+Signature ok
+The Subject's Distinguished Name is as follows
+commonName            :PRINTABLE:'server'
+Certificate is to be certified until Jan 14 09:11:12 2029 GMT (3650 days)
+Write out database with 1 new entries
+Data Base Updated
+Certificate created at: /etc/openvpn/easy-rsa/pki/issued/server.crt          #服务端证书路径
+
+dh证书
+
+[root@localhost easy-rsa]# ./easyrsa gen-dh                                                 #创建Diffie-Hellman，时间有点长
+Note: using Easy-RSA configuration from: ./vars
+Generating DH parameters, 2048 bit long safe prime, generator 2
+This is going to take a long time
+............................................................+...........................................................+.......................................................................................................+...........+..........................................................................................................................................................................................................................................................................+..........................................
+ 
+DH parameters of size 2048 created at /etc/openvpn/pki/dh.pem      #dh证书路径
+
+ta密钥
+cd /etc/openvpn
+openvpn --genkey --secret ta.key
+
+客户端证书
+为了便于区别，我们把客户端使用的证书存放在新的路径。/etc/openvpn/client
+
+创建客户端证书
+[root@localhost client]# mkdir -p /etc/openvpn/client
+[root@localhost client]# cd /etc/openvpn/client
+[root@localhost client]# cp -r /usr/share/easy-rsa/3.0.3/* /etc/openvpn/client
+[root@localhost client]# cp /usr/share/doc/easy-rsa-3.0.3/vars.example ./vars
+[root@localhost client]# ./easyrsa init-pki
+[root@localhost client]# ./easyrsa gen-req client nopass               #client为证书名，可自定义，nopass同样设置免密
+Generating a 2048 bit RSA private key
+.....................................................+++
+.................................+++
+writing new private key to '/etc/openvpn/client/pki/private/client.key.0rbEXauafe'
+-----
+You are about to be asked to enter information that will be incorporated
+into your certificate request.
+What you are about to enter is what is called a Distinguished Name or a DN.
+There are quite a few fields but you can leave some blank
+For some fields there will be a default value,
+If you enter '.', the field will be left blank.
+-----
+Common Name (eg: your user, host, or server name) [client]:
+Keypair and certificate request completed. Your files are:
+req: /etc/openvpn/client/pki/reqs/client.req
+key: /etc/openvpn/client/pki/private/client.key                                #key路径
+
+client证书配置
+
+对客户端证书签名
+切换到服务端easy-rsa目录下：
+cd /etc/openvpn/easy-rsa
+
+#导入req
+./easyrsa import-req /etc/openvpn/client/pki/reqs/client.req client
+./easyrsa sign client client        #签名,第一个client是固定的参数表示客户端，第二个client指上面导入的客户端证书名
+Note: using Easy-RSA configuration from: ./vars
+ 
+ 
+You are about to sign the following certificate.
+Please check over the details shown below for accuracy. Note that this request
+has not been cryptographically verified. Please be sure it came from a trusted
+source or that you have verified the request checksum with the sender.
+ 
+Request subject, to be signed as a client certificate for 3650 days:
+ 
+subject=
+    commonName                = client
+ 
+ 
+Type the word 'yes' to continue, or any other input to abort.
+  Confirm request details: yes                #输入'yes'
+
+Using configuration from ./openssl-1.0.cnf
+Enter pass phrase for /etc/openvpn/easy-rsa/pki/private/ca.key:      #输入ca密码（silence）
+Check that the request matches the signature
+Signature ok
+The Subject's Distinguished Name is as follows
+commonName            :PRINTABLE:'client'
+Certificate is to be certified until Apr 13 14:37:17 2028 GMT (3650 days)
+Write out database with 1 new entries
+Data Base Updated
+Certificate created at: /etc/openvpn/easy-rsa/pki/issued/client.crt     #最终客户端证书路径
+
+修改配置文件
+服务器端证书和密钥统一放到和server.conf一个目录下，便于配置
+cp /etc/openvpn/easy-rsa/pki/ca.crt /etc/openvpn/
+cp /etc/openvpn/easy-rsa/pki/private/server.key /etc/openvpn/
+cp /etc/openvpn/easy-rsa/pki/issued/server.crt /etc/openvpn/
+cp /etc/openvpn/easy-rsa/pki/dh.pem /etc/openvpn/
+
+修改openvpn服务端配置文件server.conf
+cat /etc/openvpn/server.conf
+local 192.168.170.22      		云主机私网IP，不要填写公网EIP
+port 1194                       #需要在安全组开放相应端口。建议不要使用默认值
+proto udp                        ##安全组开放协议要与配置相同，默认使用udp
+dev tun                          #采用路由隧道模式
+ca ca.crt                        #ca证书位置，相对路径，表示ca.crt和server.conf要在同一目录
+cert server.crt                #服务端证书
+key server.key               #服务端key
+dh dh.pem                     #dh密钥
+server 10.8.0.0 255.255.255.0            #给客户端分配的地址池
+ifconfig-pool-persist ipp.txt
+push "redirect-gateway def1 bypass-dhcp"     #客户端网关使用openvpn服务器网关
+push "dhcp-option DNS 8.8.8.8"               #指定dns
+push "dhcp-option DNS 114.114.114.114"
+keepalive 10 120                                                                #心跳检测，10秒检测一次，2分钟内没有回应则视为断线
+tls-auth ta.key 0                                                                  #服务端值为0，客户端为1
+cipher AES-256-CBC
+comp-lzo                                                                            #传输数据压缩
+persist-key
+persist-tun
+status openvpn-status.log
+verb 3
+
+启动openvpn
+systemctl -f enable openvpn@server.service              #设置启动文件
+systemctl start openvpn@server.service                  #启动openvpn的命令
+
+ifconfig 可以看到多了一个tun0的网卡设备，ip是10.8.0.1
+netstat -unlp可以查看监听的端口，默认的1194端口
+
+客户端所需证书(下载保存到客户端和客户端配置文件同一目录下)
+sz /etc/openvpn/easy-rsa/pki/issued/client.crt                   #在服务端证书生成目录下
+sz /etc/openvpn/client/pki/private/client.key                      #上面的客户端生成目录下
+sz /etc/openvpn/easy-rsa/pki/ca.crt                                   #ca证书
+sz /etc/openvpn/ta.key
+
+windows客户端配置openvpn
+
+下载openvpn-install-2.4.7-I601.exe 网址：https://www.filecluster.com/downloads/Open×××.html
+
+安装后，将ca.crt、client.crt、client.key拷贝C:\Program Files\OpenVPN\config目录下；
+
+然后在C:\Program Files\OpenVPN\config目录下创建client.ovpn文件，配置内容如下： 
+client
+dev tun   
+proto udp                               #和server端一致(可以使用udp比tcp快)
+remote xx.xx.xx.xx 1194                 #填写云主机公网IP和端口，与server相同
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+remote-cert-tls server
+ca ca.crt                                           #ca证书
+cert client.crt                                    #客户端证书
+key client.key                                   #客户端密钥
+tls-auth ta.key 1                               #ta密钥
+cipher AES-256-CBC
+comp-lzo                                         #传输内容压缩
+verb 3
+
+然后启动OpenVPN GUI，选择Connect，输入制作client证书时输入的密码即可连接成功
+
+打开cmd，尝试ping云主机vpn ip测试: ping 10.8.0.1
