@@ -1,0 +1,85 @@
+Kubernetes相关国外镜像
+
+由于很多镜像在国内下载不了，所以整理出来方便大伙顺利部署kubernetes集群。
+
+Helm服务
+原来镜像地址：gcr.io/kubernetes-helm/tiller:v2.11.0
+替换镜像地址：linuxhub/tiller:v2.11.0
+镜像仓库地址：https://hub.docker.com/r/linuxhub/tiller
+
+# nginx-ingress-controller:0.24.1
+原来镜像地址：quay.io/kubernetes-ingress-controller/nginx-ingress-controller:0.24.1
+替换镜像地址: linuxhub/nginx-ingress-controller:0.24.1
+镜像仓库地址：https://hub.docker.com/r/linuxhub/nginx-ingress-controller
+
+# pod-infrastructure:latest
+原来镜像地址：registry.access.redhat.com/rhel7/pod-infrastructure:latest
+替换镜像地址：linuxhub/pod-infrastructure:latest
+镜像仓库地址：https://hub.docker.com/r/linuxhub/pod-infrastructure
+使用文件：/etc/systemd/system/kube-controller-manager.service
+
+# kubernetes-dashboard-amd64:v1.8.3
+原来镜像地址：k8s.gcr.io/kubernetes-dashboard-amd64:v1.8.3
+替换镜像地址：linuxhub/kubernetes-dashboard-amd64:v1.8.3
+镜像仓库地址：https://hub.docker.com/r/linuxhub/kubernetes-dashboard-amd64
+使用文件：./cluster/addons/dashboard/dashboard-controller.yaml
+
+#kibana:5.6.4
+原来镜像地址：docker.elastic.co/kibana/kibana:5.6.4
+替换镜像地址：docker pull linuxhub/kibana:5.6.4
+镜像仓库地址：https://hub.docker.com/r/linuxhub/kibana
+使用文件：/cluster/addons/fluentd-elasticsearch/kibana-deployment.yaml
+
+# elasticsearch:v5.6.4
+原来镜像地址：k8s.gcr.io/elasticsearch:v5.6.4
+替换镜像地址：linuxhub/elasticsearch:v5.6.4
+镜像仓库地址：https://hub.docker.com/r/linuxhub/elasticsearch
+使用文件：./cluster/addons/fluentd-elasticsearch/es-statefulset.yaml
+
+# fluentd-elasticsearch:v2.0.4
+原来镜像地址：k8s.gcr.io/fluentd-elasticsearch:v2.0.4
+替换镜像地址：linuxhub/fluentd-elasticsearch:v2.0.4
+镜像仓库地址：https://hub.docker.com/r/linuxhub/fluentd-elasticsearch
+使用文件：./cluster/addons/fluentd-elasticsearch/fluentd-es-ds.yaml
+
+# alpine:3.6
+原来镜像地址：alpine:3.6
+替换镜像地址：linuxhub/alpine:3.6
+镜像仓库地址：https://hub.docker.com/r/linuxhub/alpine/
+使用文件： ./cluster/addons/fluentd-elasticsearch/es-statefulset.yaml
+
+# metrics-server-amd64:v0.2.1
+原来镜像地址：k8s.gcr.io/metrics-server-amd64:v0.2.1
+替换镜像地址：linuxhub/metrics-server-amd64:v0.2.1
+镜像仓库地址：https://hub.docker.com/r/linuxhub/metrics-server-amd64
+使用文件： ./cluster/addons/metrics-server/metrics-server-deployment.yaml
+
+# addon-resizer:1.8.1
+原来镜像地址：k8s.gcr.io/addon-resizer:1.8.1
+替换镜像地址：linuxhub/addon-resizer:1.8.1
+镜像仓库地址：https://hub.docker.com/r/linuxhub/addon-resizer
+使用文件： ./cluster/addons/metrics-server/metrics-server-deployment.yaml
+
+# heapster-amd64:v1.5.3
+原来镜像地址：k8s.gcr.io/heapster-amd64:v1.5.3
+替换镜像地址：linuxhub/heapster-amd64:v1.5.3
+镜像仓库地址：https://hub.docker.com/r/linuxhub/heapster-amd64
+使用文件：./cluster/addons/cluster-monitoring/influxdb/heapster-controller.yaml
+
+# heapster-grafana-amd64:v4.4.3
+原来镜像地址：k8s.gcr.io/heapster-grafana-amd64:v4.4.3
+替换镜像地址：linuxhub/heapster-grafana-amd64:v4.4.3
+镜像仓库地址：https://hub.docker.com/r/linuxhub/heapster-grafana-amd64
+使用文件：cluster/addons/cluster-monitoring/influxdb/influxdb-grafana-controller.yaml
+
+# heapster-influxdb-amd64:v1.3.3
+原来镜像地址：k8s.gcr.io/heapster-influxdb-amd64:v1.3.3
+替换镜像地址：linuxhub/heapster-influxdb-amd64:v1.3.3
+镜像仓库地址：https://hub.docker.com/r/linuxhub/heapster-influxdb-amd64
+使用文件：./cluster/addons/cluster-monitoring/influxdb/influxdb-grafana-controller.yaml
+
+# coredns:1.0.6
+原来镜像地址：coredns/coredns:1.0.6
+替换镜像地址: linuxhub/coredns:1.0.6
+镜像仓库地址：https://hub.docker.com/r/linuxhub/coredns
+使用文件：./cluster/addons/dns/coredns.yaml
