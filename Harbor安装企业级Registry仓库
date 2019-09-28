@@ -26,7 +26,7 @@ harbor仓库: 192.168.170.12
 
 添加 docker 源： 
 # yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo 或者使用国内阿里云或者清华的源：
-# yum-config-manager --add-repo  https://mirrors.aliyun.com/dockerce/linux/centos/docker-ce.repo 
+# yum-config-manager --add-repo  https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo 
 # yum-config-manager --add-repo https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/centos/dockerce.repo
 
 卸载旧版本 Docker
