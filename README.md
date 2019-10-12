@@ -9,3 +9,6 @@ https://github.com/jimmy201602/webterminal/blob/master/doc/Centos7_install_zh.md
 https://github.com/jimmy201602/webterminal
 
 python文章推荐：https://www.cnblogs.com/xiaozhiqi/default.html?page=3
+
+自动化运维平台OpsManage：一款代码部署、应用部署、计划任务、设备资产管理平台。
+安装部署环境网址：https://github.com/xiaozhiqi2000/OpsManage
