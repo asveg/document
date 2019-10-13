@@ -52,13 +52,21 @@ harbor仓库: 192.168.170.12
 第三节 docker-compose 安装
 
 harbor 的几个组件是用 docker-compose 启动和管理的，所以首先安装 docker-compose
-（1）下载docker-compose：下载可能会很慢。可以web下载https://github.com/docker/compose/releases，然后导入到/usr/local/bin修改文件名为docker-compose
+
+二进制包安装方法一：
+
+（1）下载docker-compose：下载可能会很慢。可以web页面下载https://github.com/docker/compose/releases需要的版本，然后导入到/usr/local/bin修改文件名为docker-compose
 # curl -L https://github.com/docker/compose/releases/download/1.24.1/docker-compose-`uname -s`-`uname -m` /usr/local/bin/docker-compose
-chmod +x /usr/local/bin/docker-compose
-ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+# chmod +x /usr/local/bin/docker-compose
+# ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
 
 查看 docker-compose 版本号
 # docker-compose -version
+
+PIP安装方法二：
+
+这种方式是将 Compose 当作一个 Python 应用来从 pip 源中安装。执行安装命令：安装速度较快。
+# sudo pip install -U docker-compose
 
 为Docker配置加速器, 方便通过国内镜像服务器快速拉取Docker Hub提供的镜像。
 
