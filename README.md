@@ -12,3 +12,6 @@ python文章推荐：https://www.cnblogs.com/xiaozhiqi/default.html?page=3
 
 自动化运维平台OpsManage：一款代码部署、应用部署、计划任务、设备资产管理平台。
 安装部署环境网址：https://github.com/xiaozhiqi2000/OpsManage
+
+分享程序员成长经历视频：https://www.bilibili.com/video/av52152667/?spm_id_from=333.788.videocard.1
+
