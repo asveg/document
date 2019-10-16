@@ -65,6 +65,8 @@ redis-K,V数据库，因其高性能的操作性和支持丰富的数据结构�
 
 redis.clients.jedis.exceptions.JedisDataException: MISCONF Redis is configured to save RDB snapshots, but is currently not able to persist on disk. Commands that may modify the data set are disabled. Please check Redis logs for details about the error.
 
+问题分析过程:
+
 从错误提示，可以看出是向磁盘保存数据失败。引起这个问题的原因一般是内存不足，但是生产环境我们一般都会为系统分配足够的内存运行，而且查看内存情况也显示还有可用内存。
 
 查看redis日志，发现有这个错误：Can’t save in background: fork: Cannot allocate memory
