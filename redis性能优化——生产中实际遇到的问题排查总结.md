@@ -42,8 +42,18 @@ redis-K,V数据库，因其高性能的操作性和支持丰富的数据结构�
 通过上述检查后，发现redis服务端connected_clients连接数持续过高，经常在最大值徘徊。但是结合客户端配置的最大连接配置maxActive，计算出所有客户端连接占满的情况下最大的连接数也达不到connected_clients的连接数。
 
 执行client list命令，发现大量的client的idle时间特别长：
-
-
+```
+127.0.0.1:6379> client list
+id=1 addr=135.23.8.10:49566 fd=5 name= age=1882380 idle=1882380 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=135.23.8.10=0 oll=0 omem=0 events=r cmd=client
+id=2 addr=135.23.8.10:49566 fd=5 name= age=1882324 idle=1882324 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=135.23.8.10=0 oll=0 omem=0 events=r cmd=client
+id=3 addr=135.23.8.10:49566 fd=5 name= age=1882327 idle=1879906 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=135.23.8.10=0 oll=0 omem=0 events=r cmd=client
+id=4 addr=135.23.8.10:49566 fd=5 name= age=1882351 idle=1879906 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=135.23.8.10=0 oll=0 omem=0 events=r cmd=client
+id=5 addr=135.23.8.10:49566 fd=5 name= age=1882351 idle=1879906 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=135.23.8.10=0 oll=0 omem=0 events=r cmd=client
+id=6 addr=135.23.8.10:49566 fd=5 name= age=1882351 idle=1879906 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=135.23.8.10=0 oll=0 omem=0 events=r cmd=client
+id=7 addr=135.23.8.10:49566 fd=5 name= age=1882351 idle=1879906 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=135.23.8.10=0 oll=0 omem=0 events=r cmd=client
+id=8 addr=135.23.8.10:49566 fd=5 name= age=1882351 idle=1879906 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=135.23.8.10=0 oll=0 omem=0 events=r cmd=client
+id=9 addr=135.23.8.10:49566 fd=5 name= age=1882351 idle=1879906 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=32768 obl=0 oll=0 omem=0 events=r cmd=client
+```
 正常的client连接，在持续使用的情况下，是不可能空闲这么长时间，连接长时间空闲，客户端也会关闭连接。
 
 查看redis服务端下面两项配置：
