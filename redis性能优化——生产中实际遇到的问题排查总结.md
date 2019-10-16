@@ -113,7 +113,7 @@ overcommit_memory有三种取值：0， 1， 2
 
 这里我用wireshark来抓取中间的tcp数据包，下面是抓取了一个完整的redis连接（从发起到结束）的tcp数据包
 
-
+抓包链接：https://blog.csdn.net/qq_22193519/article/details/102589451
 
 从上面可以看到，从tcp3次握手建立连接，到最后客户端发送reset包给服务端终止了这个连接。
 
