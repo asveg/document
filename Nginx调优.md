@@ -11,7 +11,7 @@ http {
 }
 ```
 2.隐藏 Nginx 版本号和软件名
-
+```
   为什么要隐藏 Nginx 版本号和软件名：一般来说，软件的漏洞都与版本有关，隐藏版本号是为了防止恶意用户利用软件漏洞进行攻击，而软件名可以进行修改，否则黑客知道是 Nginx 服务器更容易进行攻击，需要注意的是，隐藏 Nginx 软件名需要重新编译安装 Nginx ，如果没有该方面需求尽量不要做
 
   1) 修改：/usr/local/src/nginx-1.6.3/src/core/nginx.h
@@ -35,24 +35,24 @@ static u_char ngx_http_error_tail[] =
 ;
  4) 重新编译 Nginx
 
-cd /usr/local/src/nginx-1.6.3
-./configure --user=nginx --group=nginx --prefix=/usr/local/nginx --with-http_stub_status_module --with-http_ssl_module
+# cd /usr/local/src/nginx-1.6.3
+# ./configure --user=nginx --group=nginx --prefix=/usr/local/nginx --with-http_stub_status_module --with-http_ssl_module
 make && make install
 /usr/local/nginx/sbin/nginx
-
+```
 3.更改 Nginx 服务的默认用户
-
+```
   为什么要更改 Nginx 服务的默认用户：就像更改 ssh 的默认 22 端口一样，增加安全性，Nginx 服务的默认用户是 nobody ，我们更改为 nginx
 1) 添加 nginx 用户
 
 # useradd -s /sbin/nologin -M nginx
 
- 2) 更改 Nginx 配置文件
+2) 更改 Nginx 配置文件
 user nginx nginx;       # 指定Nginx服务的用户和用户组
+```
 
-
- 4.优化 Nginx worker 进程数
-
+4.优化 Nginx worker 进程数
+```
 Nginx 有 Master 和 worker 两种进程，Master 进程用于管理 worker 进程，worker 进程用于 Nginx 服务
 
 worker 进程数应该设置为等于 CPU 的核数，高流量并发场合也可以考虑将进程数提高至 CPU 核数 * 2
@@ -62,10 +62,10 @@ worker 进程数应该设置为等于 CPU 的核数，高流量并发场合也�
 
 # vim /usr/local/nginx/conf/nginx.conf    # 设置worker进程数
 worker_processes  2;
+```
 
-
- 5.绑定 Nginx 进程到不同的 CPU 上
-
+5.绑定 Nginx 进程到不同的 CPU 上
+```
    为什么要绑定 Nginx 进程到不同的 CPU 上 ：默认情况下，Nginx 的多个进程有可能跑在某一个 CPU 或 CPU 的某一核上，导致 Nginx 进程使用硬件的资源不均，因此绑定 Nginx 进程到不同的 CPU 上是为了充分利用硬件的多 CPU 多核资源的目的。
 
 # grep -c processor /proc/cpuinfo    # 查看CPU核数
@@ -78,10 +78,10 @@ worker_cpu_affinity 0001 0010 0100 1000;
  
 worker_processes  8;         # 8核CPU的配置
 worker_cpu_affinity 00000001 00000010 00000100 00001000 00010000 00100000 01000000 1000000;
+```
 
-
- 6.优化 Nginx 处理事件模型
-
+6.优化 Nginx 处理事件模型
+```
   Nginx 的连接处理机制在不同的操作系统会采用不同的 I/O 模型，要根据不同的系统选择不同的事件处理模型，可供选择的事件处理模型有：kqueue 、rtsig 、epoll 、/dev/poll 、select 、poll ，其中 select 和 epoll 都是标准的工作模型，kqueue 和 epoll 是高效的工作模型，不同的是 epoll 用在 Linux 平台上，而 kqueue 用在 BSD 系统中。
 
 (1) 在 Linux 下，Nginx 使用 epoll 的 I/O 多路复用模型
@@ -95,9 +95,9 @@ events {
     use epoll;
 }
 ......
-
+```
  7.优化 Nginx 单个进程允许的最大连接数
-
+```
  (1) 控制 Nginx 单个进程允许的最大连接数的参数为 worker_connections ，这个参数要根据服务器性能和内存使用量来调整
  (2) 进程的最大连接数受 Linux 系统进程的最大打开文件数限制，只有执行了 "ulimit -HSn 65535" 之后，worker_connections 才能生效
  (3) 连接数包括代理服务器的连接、客户端的连接等，Nginx 总并发连接数 = worker 数量 * worker_connections, 总数保持在3w左右
@@ -111,18 +111,18 @@ events {
     worker_connections  15000; #单个进程允许的最大连接数
 }
 ......
-
+```
 
 8.优化 Nginx worker 进程最大打开文件数
-
+```
 # cat /usr/local/nginx/conf/nginx.conf
 ......
 worker_rlimit_nofile 65535;    # worker 进程最大打开文件数，可设置为优化后的 ulimit -HSn 的结果
 ......
-
+```
 
 9.优化服务器域名的散列表大小
-
+```
     如下，如果在 server_name 中配置了一个很长的域名，那么重载 Nginx 时会报错，因此需要使用 server_names_hash_max_size 来解决域名过长的问题，该参数的作用是设置存放域名的最大散列表的存储的大小，根据 CPU 的一级缓存大小来设置。
 
 server {
@@ -143,10 +143,10 @@ http {
     server_tokens off;
     include vhosts/*.conf;
 }
-
+```
 
  10.开启高效文件传输模式
-
+```
  (1) sendfile 参数用于开启文件的高效传输模式，该参数实际上是激活了 sendfile() 功能，sendfile() 是作用于两个文件描述符之间的数据拷贝函数，这个拷贝操作是在内核之中的，被称为 "零拷贝" ，sendfile() 比 read 和 write 函数要高效得多，因为 read 和 write 函数要把数据拷贝到应用层再进行操作
 
  (2) tcp_nopush 参数用于激活 Linux 上的 TCP_CORK socket 选项，此选项仅仅当开启 sendfile 时才生效，tcp_nopush 参数可以允许把 http response header 和文件的开始部分放在一个文件里发布，以减少网络报文段的数量
@@ -163,11 +163,10 @@ http {
     server_tokens off;
     include vhosts/*.conf;
 }
-
-
+```
 
 11.优化 Nginx 连接超时时间
-
+```
 1. 什么是连接超时
 (1) 举个例子，某饭店请了服务员招待顾客，但是现在饭店不景气，因此要解雇掉一些服务员，这里的服务员就相当于 Nginx 服务建立的连接
 (2) 当服务器建立的连接没有接收处理请求时，可以在指定的时间内让它超时自动退出
@@ -204,9 +203,10 @@ http {
     send_timeout 25;
     include vhosts/*.conf;
 }
+```
 
 12.限制上传文件的大小
-
+```
    client_max_body_size 用于设置最大的允许客户端请求主体的大小，在请求首部中有 "Content-Length" ，如果超过了此配置项，客户端会收到 413 错误，即请求的条目过大
 
 http {
@@ -214,9 +214,10 @@ http {
     client_max_body_size 8m;    # 设置客户端最大的请求主体大小为8M}
 ......
 }
+```
 
 13.FastCGI 相关参数调优 
-
+```
     当 LNMP 组合工作时，首先是用户通过浏览器输入域名请求 Nginx Web 服务，如果请求的是静态资源，则由 Nginx 解析返回给用户；如果是动态请求（如 PHP），那么 Nginx 就会把它通过 FastCGI 接口发送给 PHP 引擎服务（即 php-fpm）进行解析，如果这个动态请求要读取数据库数据，那么 PHP 就会继续向后请求 MySQL 数据库，以读取需要的数据，并最终通过 Nginx 服务把获取的数据返回给用户，这就是 LNMP 环境的基本请求流程。
 
  FastCGI 介绍：CGI 通用网关接口，是 HTTP 服务器与其他机器上的程序服务通信交流的一种工具，CGI 接口的性能较差，每次 HTTP 服务器遇到动态程序时都需要重新启动解析器来执行解析，之后结果才会被返回 HTTP 服务器，因此就有了 FastCGI ，FastCGI 是一个在 HTTP 服务器和动态脚本语言间通信的接口，主要是把动态语言和 HTTP 服务器分离开来，使得 HTTP 服务器专一地处理静态请求，提高整体性能，在 Linux 下，FastCGI 接口即为 socket ，这个 socket 可以是文件 socket 也可以是 IP socket
@@ -263,10 +264,10 @@ http {
         }
     }
 }
-
+```
 
  14.配置 Nginx gzip 压缩
-
+```
    Nginx gzip 压缩模块提供了压缩文件内容的功能，用户请求的内容在发送到客户端之前，Nginx 服务器会根据一些具体的策略实施压缩，以节约网站出口带宽，同时加快数据传输效率，来提升用户访问体验，需要压缩的对象有 html 、js 、css 、xml 、shtml ，图片和视频尽量不要压缩，因为这些文件大多都是已经压缩过的，如果再压缩可能反而变大，另外，压缩的对象必须大于 1KB，由于压缩算法的特殊原因，极小的文件压缩后可能反而变大
 
 # cat /usr/local/nginx/conf/nginx.conf
@@ -280,10 +281,10 @@ http {
     gzip_types  text/css text/xml application/javascript;    # 允许压缩的媒体类型
     gzip_vary  on;               # 该选项可以让前端的缓存服务器缓存经过gzip压缩的页面，例如用代理服务器缓存经过Nginx压缩的数据
 }
-
+```
 
 16.优化 Nginx access 日志
-
+```
 1. 配置日志切割
 
 # vim /usr/local/nginx/conf/cut_nginx_log.sh
@@ -306,10 +307,10 @@ location ~ .*\.(js|jpg|JPG|jpeg|JPEG|css|bmp|gif|GIF)$ {
 
 chown -R root.root /usr/local/nginx/logs
 chmod -R 700 /usr/local/nginx/logs
-
+```
 
  17.优化 Nginx 站点目录
-
+```
  1. 禁止解析指定目录下的指定程序
 location ~ ^/data/.*\.(php|php5|sh|pl|py)$ {     # 根据实际来禁止哪些目录下的程序，且该配置必须写在 Nginx 解析 PHP 的配置前面
     deny all;
@@ -323,9 +324,10 @@ location ~ ^/wordpress {     # 相对目录，表示只允许 192.168.1.1 访问
     allow 192.168.1.1/24;
     deny all;
 }
+```
 
  18.配置 Nginx 防盗链
-
+```
   什么是防盗链：简单地说，就是某些不法网站未经许可，通过在其自身网站程序里非法调用其他网站的资源，然后在自己的网站上显示这些调用的资源，使得被盗链的那一端消耗带宽资源  (1) 根据 HTTP referer 实现防盗链：referer 是 HTTP的一个首部字段，用于指明用户请求的 URL 是从哪个页面通过链接跳转过来的
 
 (2) 根据 cookie 实现防盗链：cookie 是服务器贴在客户端身上的 "标签" ，服务器用它来识别客户端
@@ -350,9 +352,9 @@ location /images {
         return 403;
     }
 }
-
+```
  19.配置 Nginx 错误页面优雅显示
-
+```
 # cat /usr/local/nginx/conf/nginx.conf
 ......
 http {
@@ -363,24 +365,27 @@ http {
         # 将这些状态码的页面链接到 http://www.xxxx.com/error.html ，也可以单独指定某个状态码的页面，如 error_page 404 /404.html
     }
 }
+```
 
  20.优化 Nginx 文件权限
-
+```
    为了保证网站不受木马入侵，所有文件的用户和组都应该为 root ，所有目录的权限是 755 ，所有文件的权限是 644
 
 # chown -R root.root /usr/local/nginx/....   # 根据实际来调整
 # chmod 755 /usr/local/nginx/....
 # chmod 644 /usr/local/nginx/....
+```
 
 21.Nginx 防爬虫优化
-
+```
  我们可以根据客户端的 user-agents 首部字段来阻止指定的爬虫爬取我们的网站\
 
 if ($http_user_agent ~* "qihoobot|Baiduspider|Googlebot|Googlebot-Mobile|Googlebot-Image|Mediapartners-Google|Adsbot-Google|Yahoo! Slurp China|YoudaoBot|Sosospider|Sogou spider|Sogou web spider|MSNBot") {
     return 403;
 }
-
+```
  22. 集群代理优化
+```
 upstream bbs_com_pool {  #定义服务器池
     ip_hash;    #会话保持(当服务器集群中没有会话池时，且代理的是动态数据就必须写ip_hash,反之什么也不用写)
     #fair   #智能分配(第三方，需要下载upstream_fair模块)根据后端服务器的响应时间来调度
@@ -425,3 +430,4 @@ stream{
         proxy_temp_file_write_size 64k; #proxy临时文件的大小
     }
 }
+```
