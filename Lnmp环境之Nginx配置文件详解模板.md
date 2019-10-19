@@ -1,5 +1,5 @@
 Lnmp环境之Nginx配置文件详解
-
+```
 #定义Nginx运行的用户和用户组
 user www www;
 
@@ -332,3 +332,4 @@ http
         }
     }
 }
+```
