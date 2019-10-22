@@ -1,8 +1,17 @@
 
 weblogic安装
 
-二、安装JDK
+一、环境
+``
+linux版本：RedHat 6.7  
 
+weblogic版本:WLS10.3.6  下载链接：https://pan.baidu.com/s/1nSTHA69lLVo55Uk5y_UcAw
+
+JDK版本：1.8   下载链接：https://pan.baidu.com/s/1snD2FG8d8HTDfAR9KBIkAg
+
+```
+二、安装JDK
+``
 将JDK包上传至根目录即可，
 
 [root@bogon /]# tar -xvf  jdk-8u161-linux-x64.tar.gz
@@ -14,16 +23,17 @@ export CLASSPATH=.:$JAVA_HOME/lib:$JRE_HOME/
 export PATH=$JAVA_HOME/bin:$JRE_HOME/bin:$PATH
 export ORACLE_HOME=/weblogic/wls1212/ofmhome
 [root@bogon /]# source /etc/profile
-
+```
 三、创建目录，用户，组
+```
 mkdir -pv /data/weblogic
 groupadd weblogic
 useradd -g weblogic weblogic
 echo "123456" | passwd --stdin weblogic   
 chown -R weblogic:weblogic /data
-
+```
 四、安装
-
+```
 将安装包wls1036_generic.jar上传至/home/weblogic下
 
 su - weblogic
@@ -42,13 +52,12 @@ java -jar wls1036_generic.jar
 	(3)输入Yes  #不接受更新
 3.在选择安装类型时，选择定制安装 ，即选择索引号2
 
-
 安装主目录是/data/weblogic
 Weblogic server目录是 /data/weblogic/wlserver_10.3
 Oracel coherence目录是/data/weblogic/coherence_3.7
-
+```
 五、配置weblogic server环境
-
+```
 5.1 配置域（它是一个管理的单元，其中包含了多个weblogic server）
 
 使用配置助手配置，以下为各个操作系统上的不同方法汇总：
@@ -93,19 +102,22 @@ cd /data/weblogic/wlserver_10.3/common/bin
 第十二步：选择索引号 修改监听的地址和端口，回车即可
 第十三步：显示创建domain的进度条。
 至此，weblogic域安装成功，安装主目录是/data/weblogic/user_projects/domains
-
+```
 六、修改hosts文件
+```
 切换到root用户：
 echo IP   hostname >> /etc/hosts
-
+```
 七、启动weblogic server
+```
 su - weblogic
 cd  /data/weblogic/user_projects/domains/base_domain/bin
 ./startWeblogic.sh
 
 输入用户名：weblogic
 输入密码：12345678
-
+```
 八、打开控制台
+```
 http://IP:7001/console
 
