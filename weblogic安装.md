@@ -98,12 +98,25 @@ cd /data/weblogic/wlserver_10.3/common/bin
 第十三步：显示创建domain的进度条。
 至此，weblogic域安装成功，安装主目录是/data/weblogic/user_projects/domains
 ```
-六、修改hosts文件
+六、打java反序列化补丁  weblogic用户
+```
+./bsu.sh -prod_dir=/data/weblogic/Oracle/Middleware/wlserver_10.3 -status=applied -verbose -view   先进行检查 会生成一个cache_dir目录
+
+先打p20780171_1036_Generic
+
+把文件传到cache_dir
+
+./bsu.sh -install -patch_download_dir=/data/weblogic/Oracle/Middleware/utils/bsu/cache_dir -patchlist=EJUW -prod_dir=/data/weblogic/Oracle/Middleware/wlserver_10.3
+
+./bsu.sh -install -patch_download_dir=/data/weblogic/Oracle/Middleware/utils/bsu/cache_dir -patchlist=ZLNA -prod_dir=/data/weblogic/Oracle/Middleware/wlserver_10.3
+
+```
+七、修改hosts文件
 ```
 切换到root用户：
 echo IP   hostname >> /etc/hosts
 ```
-七、启动weblogic server
+八、启动weblogic server
 ```
 su - weblogic
 cd  /data/weblogic/user_projects/domains/base_domain/bin
@@ -112,7 +125,7 @@ cd  /data/weblogic/user_projects/domains/base_domain/bin
 输入用户名：weblogic
 输入密码：12345678
 ```
-八、打开控制台
+九、打开控制台
 ```
 http://IP:7001/console
 
