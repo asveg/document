@@ -2,12 +2,12 @@
 weblogic安装
 
 一、环境
-``
+```
 linux版本：RedHat 6.7  
 
 weblogic版本:WLS10.3.6  下载链接：https://pan.baidu.com/s/1nSTHA69lLVo55Uk5y_UcAw
 
-JDK版本：1.8   下载链接：https://pan.baidu.com/s/1snD2FG8d8HTDfAR9KBIkAg
+JDK版本：1.8   下载链接：https://pan.baidu.com/s/1_p0KN_45cRstmrZc0kHO5w
 
 ```
 二、安装JDK
