@@ -9,11 +9,10 @@ weblogic版本:WLS10.3.6  下载链接：https://pan.baidu.com/s/1nSTHA69lLVo55
 
 JDK版本：1.8   下载链接：https://pan.baidu.com/s/1_p0KN_45cRstmrZc0kHO5w
 
-```
+
 二、安装JDK
 ``
 将JDK包上传至根目录即可，
-
 [root@bogon /]# tar -xvf  jdk-8u161-linux-x64.tar.gz
 [root@bogon /]# mv jdk1.8.0_161/ /usr/java
 [root@bogon /]# vim /etc/profile
