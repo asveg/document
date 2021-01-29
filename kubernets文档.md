@@ -9821,4 +9821,5 @@ printf "    NUM  PID\t\tCOMMAND\n" && ps -eLf | awk '{$1=null;$3=null;$4=null;$5
 # References
 
 * [kubernetes源码讲解](https://draveness.me/kubernetes-service/)
+* [k8s排错指南](https://k8s.imroc.io/troubleshooting/trick/use-systemtap-to-locate-problems/)
 
