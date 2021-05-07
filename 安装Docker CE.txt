@@ -41,8 +41,8 @@ $ sudo yum-config-manager --enable docker-ce-test
 安装 Docker CE
 
 更新 yum 软件源缓存，并安装 docker-ce 。
-$ sudo yum makecache fast
-$ sudo yum install docker-ce
+$ sudo yum makecache fast -y
+$ sudo yum install docker-ce -y
 
 使用脚本自动安装
 在测试或开发环境中 Docker 官方为了简化安装流程，提供了一套便捷的安装脚本，CentOS系统上可以使用这套脚本安装：
