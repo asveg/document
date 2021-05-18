@@ -50,8 +50,7 @@ $ sudo ntpdate cn.pool.ntp.org
 在每台机器上关闭防火墙：
 
 ① 关闭服务，并设为开机不自启
-$ sudo systemctl stop firewalld
-$ sudo systemctl disable firewalld
+ sudo systemctl stop firewalld; systemctl disable firewalld
 
 ② 清空防火墙规则
 $ sudo iptables -F && sudo iptables -X && sudo iptables -F -t nat && sudo iptables -X -t nat
@@ -64,18 +63,17 @@ $ sudo swapoff -a
 　　
 
 2、为了防止开机自动挂载 swap 分区，可以注释  /etc/fstab  中相应的条目：
-$ sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+$ sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
 　　
 
 2.7 关闭 SELinux
 1、关闭 SELinux，否则后续 K8S 挂载目录时可能报错  Permission denied  ：
-$ sudo setenforce 0
+ setenforce 0
 　　
 
 2、修改配置文件，永久生效；
 
-$ vim /etc/selinux/config
-SELINUX=disabled
+sed -i s#SELINUX=enforcing#SELINUX=disabled# /etc/selinux/config 
 　　
 
 3、使用kubeadm安装K8S集群
@@ -121,24 +119,25 @@ repolist: 22,292
  kubeadm：安装K8S工具
  kubectl：K8S命令行工具
 （1）安装
-[root@master ~]# yum -y install docker-ce  下载稳定版本
-[root@master ~]# yum install -y kubelet-1.18.5 kubeadm-1.18.5 kubectl-1.18.5
+
+# 安装必要依赖
+yum install -y yum-utils device-mapper-persistent-data lvm2
+yum -y install docker-ce  #下载稳定版本
+yum install -y kubelet-1.18.5 kubeadm-1.18.5 kubectl-1.18.5
 　　
 
 3.4 启动服务
 3.4.1 配置启动docker服务
 （1）添加加速器到配置文件
-[root@master ~]# mkdir -p /etc/docker
-[root@master ~]# tee /etc/docker/daemon.json <<-'EOF'
+mkdir -p /etc/docker
+tee /etc/docker/daemon.json <<-'EOF'
 {
   "registry-mirrors": ["https://registry.docker-cn.com"]
 }
 EOF
 
 （2）启动服务
-[root@master ~]# systemctl daemon-reload
-[root@master ~]# systemctl start docker
-[root@master ~]# systemctl enable docker.service
+systemctl daemon-reload; systemctl start docker; systemctl enable docker.service
 
 （3）打开iptables内生的桥接相关功能，已经默认开启了，没开启的自行开启
 [root@node1 ~]# cat /proc/sys/net/bridge/bridge-nf-call-ip6tables
@@ -156,7 +155,7 @@ eof
 
 （2）先设为开机自启
 
-[root@master ~]# systemctl enable kubelet.service
+[root@master ~]# systemctl enable kubelet.service; systemctl start service
 因为K8S集群还未初始化，所以kubelet 服务启动不成功，下面初始化完成，再启动即可。
 
 
@@ -232,6 +231,8 @@ chmod +x get-k8s-images.sh
 [root@master ~]# cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 　　
 
+
+
 4.2 验证
 （1）拉取了必须的镜像
 [root@master ~]# docker image ls
@@ -261,7 +262,7 @@ etcd-0               Healthy   {"health": "true"}
 查询集群节点信息（因为还没有部署好flannel，所以节点显示为NotReady）
 [root@master ~]# kubectl get nodes
 NAME      STATUS    ROLES     AGE       VERSION
-master    NotReady  master    13m       v1.11.1
+master    NotReady  master    13m       v1.18.5
 查询名称空间，默认
 [root@master ~]# kubectl get ns
 NAME            STATUS    AGE
@@ -272,7 +273,8 @@ kube-system     Active    13m
 
 4.3 部署网络插件flannel
 （1）直接使用kubectl 执行gitlab上的flannel 部署文件
-[root@master ~]# kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+[root@master ~]# curl -O https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+[root@master ~]# kubectl apply -f kube-flannel.yml
 clusterrole.rbac.authorization.k8s.io/flannel created
 clusterrolebinding.rbac.authorization.k8s.io/flannel created
 serviceaccount/flannel created
