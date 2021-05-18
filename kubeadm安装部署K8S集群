@@ -15,10 +15,10 @@ kubeadm安装部署K8S集群
 
 2、安装kubernetes先决条件
 2.1 组件版本
- docker 17.03.2
- kubeadm 1.11.1
- kubelet 1.11.1
- kubectl 1.11.1
+ docker 19.03.2
+ kubeadm 1.18.5
+ kubelet 1.18.5
+ kubectl 1.18.5
  
 
 2.2 集群机器
@@ -35,11 +35,11 @@ $ sudo hostnamectl set-hostname node2
 　　
 
 2、修改 /etc/hostname  文件，添加主机名和 IP 的对应关系：
-$ vim /etc/hosts
+$ cat << eof > /etc/hosts
 192.168.10.103 master
 192.168.10.104 node1
 192.168.10.105 node2
-　　
+eof
 
 2.4 同步系统时间
 $ yum -y install ntpdate
@@ -95,13 +95,14 @@ SELINUX=disabled
 [root@master ~]# sed -i 's@download.docker.com@mirrors.tuna.tsinghua.edu.cn/docker-ce@g' /etc/yum.repos.d/docker-ce.repo
 　　
 3.2.2 配置kubernetes仓库
-[root@node2 ~]# cd /etc/yum.repos.d/
-[root@master yum.repos.d]# vim kubernetes.repo
+
+[root@node2 ~]# cat << eof > /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
 name=Kubernetes Repo
 baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-x86_64/
 gpgcheck=0
 enable=1
+eof
 　　
 
 3.2.3 更新yum仓库
@@ -121,7 +122,7 @@ repolist: 22,292
  kubectl：K8S命令行工具
 （1）安装
 [root@master ~]# yum -y install docker-ce  下载稳定版本
-[root@master ~]# yum -y install kubeadm-1.11.1 kubelet-1.11.1 kubectl-1.11.1
+[root@master ~]# yum install -y kubelet-1.18.5 kubeadm-1.18.5 kubectl-1.18.5
 　　
 
 3.4 启动服务
@@ -147,9 +148,10 @@ EOF
 
 3.4.2 配置启动kubelet服务
 （1）修改配置文件
-[root@master ~]# vim /etc/sysconfig/kubelet
+[root@master ~]# cat << eof > /etc/sysconfig/kubelet
 KUBELET_EXTRA_ARGS="--fail-swap-on=false"
 KUBE_PROXY=MODE=ipvs
+eof
 　　
 
 （2）先设为开机自启
@@ -164,7 +166,7 @@ KUBE_PROXY=MODE=ipvs
 4.1 使用kubeadm init初始化
 （1）使用kubeadm init 进行初始化（需要进行很多操作，所以要等待一段时间）
 
-[root@master ~]# kubeadm init --kubernetes-version=v1.11.1 --pod-network-cidr=10.244.0.0/16 --service-cidr=10.96.0.0/12 --ignore-preflight-errors=Swap
+[root@master ~]# kubeadm init --kubernetes-version=v1.18.5 --pod-network-cidr=10.244.0.0/16 --service-cidr=10.96.0.0/12 --ignore-preflight-errors=Swap
 释：
  --kubernetes-version：指定kubeadm版本；我这里下载的时候kubeadm最高时1.11.1版本
  --pod-network-cidr：指定pod所属网络
@@ -179,13 +181,50 @@ KUBE_PROXY=MODE=ipvs
 （2）下载镜像
 
 我已经将我下载的镜像导出，放入我的网盘，有需要的打赏一杯咖啡钱，私聊博主；博主会很快恢复的；
-[root@master ~]# docker image load -i kube-apiserver-amd64.tar.gz
-[root@master ~]# docker image load -i kube-proxy-amd64.tar.gz
-[root@master ~]# docker image load -i kube-controller-manager-amd64.tar.gz
-[root@master ~]# docker image load -i kube-scheduler-amd64.tar.gz
-[root@master ~]# docker image load -i etcd-amd64.tar.gz
-[root@master ~]# docker image load -i pause.tar.gz
-　　
+cat << 'eof' > get-k8s-images.sh
+#!/bin/bash
+# Script For Quick Pull K8S Docker Images
+# by Hellxz Zhang <hellxz001@foxmail.com>
+
+KUBE_VERSION=v1.18.5
+PAUSE_VERSION=3.2
+CORE_DNS_VERSION=1.6.7
+ETCD_VERSION=3.4.3-0
+
+# pull kubernetes images from hub.docker.com
+docker pull kubeimage/kube-proxy-amd64:$KUBE_VERSION
+docker pull kubeimage/kube-controller-manager-amd64:$KUBE_VERSION
+docker pull kubeimage/kube-apiserver-amd64:$KUBE_VERSION
+docker pull kubeimage/kube-scheduler-amd64:$KUBE_VERSION
+# pull aliyuncs mirror docker images
+docker pull registry.cn-hangzhou.aliyuncs.com/google_containers/pause:$PAUSE_VERSION
+docker pull registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:$CORE_DNS_VERSION
+docker pull registry.cn-hangzhou.aliyuncs.com/google_containers/etcd:$ETCD_VERSION
+
+# retag to k8s.gcr.io prefix
+docker tag kubeimage/kube-proxy-amd64:$KUBE_VERSION  k8s.gcr.io/kube-proxy:$KUBE_VERSION
+docker tag kubeimage/kube-controller-manager-amd64:$KUBE_VERSION k8s.gcr.io/kube-controller-manager:$KUBE_VERSION
+docker tag kubeimage/kube-apiserver-amd64:$KUBE_VERSION k8s.gcr.io/kube-apiserver:$KUBE_VERSION
+docker tag kubeimage/kube-scheduler-amd64:$KUBE_VERSION k8s.gcr.io/kube-scheduler:$KUBE_VERSION
+docker tag registry.cn-hangzhou.aliyuncs.com/google_containers/pause:$PAUSE_VERSION k8s.gcr.io/pause:$PAUSE_VERSION
+docker tag registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:$CORE_DNS_VERSION k8s.gcr.io/coredns:$CORE_DNS_VERSION
+docker tag registry.cn-hangzhou.aliyuncs.com/google_containers/etcd:$ETCD_VERSION k8s.gcr.io/etcd:$ETCD_VERSION
+
+# untag origin tag, the images won't be delete.
+docker rmi kubeimage/kube-proxy-amd64:$KUBE_VERSION
+docker rmi kubeimage/kube-controller-manager-amd64:$KUBE_VERSION
+docker rmi kubeimage/kube-apiserver-amd64:$KUBE_VERSION
+docker rmi kubeimage/kube-scheduler-amd64:$KUBE_VERSION
+docker rmi registry.cn-hangzhou.aliyuncs.com/google_containers/pause:$PAUSE_VERSION
+docker rmi registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:$CORE_DNS_VERSION
+docker rmi registry.cn-hangzhou.aliyuncs.com/google_containers/etcd:$ETCD_VERSION
+eof
+
+# 添加脚本执行权限
+chmod +x get-k8s-images.sh
+
+# 执行脚本
+./get-k8s-images.sh  
 
 （3）初始化命令成功后，创建.kube目录
 
