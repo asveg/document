@@ -34,7 +34,7 @@ $ sudo hostnamectl set-hostname node1
 $ sudo hostnamectl set-hostname node2
 　　
 
-2、修改 /etc/hostname  文件，添加主机名和 IP 的对应关系：
+2、修改 /etc/hosts  文件，添加主机名和 IP 的对应关系：
 $ cat << eof > /etc/hosts
 192.168.10.103 master
 192.168.10.104 node1
@@ -159,24 +159,6 @@ eof
 因为K8S集群还未初始化，所以kubelet 服务启动不成功，下面初始化完成，再启动即可。
 
 
-4、初始化kubernetes master节点
-在master服务器上执行，完成以下所有操作
-
-4.1 使用kubeadm init初始化
-（1）使用kubeadm init 进行初始化（需要进行很多操作，所以要等待一段时间）
-
-[root@master ~]# kubeadm init --kubernetes-version=v1.18.5 --pod-network-cidr=10.244.0.0/16 --service-cidr=10.96.0.0/12 --ignore-preflight-errors=Swap
-释：
- --kubernetes-version：指定kubeadm版本；我这里下载的时候kubeadm最高时1.11.1版本
- --pod-network-cidr：指定pod所属网络
- --service-cidr：指定service网段
- --ignore-preflight-errors=Swap/all：忽略 swap/所有 报错
-注：
-
-　　因为kubeadm需要拉取必要的镜像，这些镜像需要“***”；所以可以先在docker hub或其他镜像仓库拉取kube-proxy、kube-scheduler、kube-apiserver、kube-controller-manager、etcd、pause镜像；并加上 --ignore-preflight-errors=all 忽略所有报错即可。
-
- 
-
 （2）下载镜像
 
 我已经将我下载的镜像导出，放入我的网盘，有需要的打赏一杯咖啡钱，私聊博主；博主会很快恢复的；
@@ -225,12 +207,35 @@ chmod +x get-k8s-images.sh
 # 执行脚本
 ./get-k8s-images.sh  
 
+
+
+4、初始化kubernetes master节点
+在master服务器上执行，完成以下所有操作
+
+4.1 使用kubeadm init初始化
+（1）使用kubeadm init 进行初始化（需要进行很多操作，所以要等待一段时间）
+
+[root@master ~]# kubeadm init --kubernetes-version=v1.18.5 --pod-network-cidr=10.244.0.0/16 --service-cidr=10.96.0.0/12 --ignore-preflight-errors=Swap
+释：
+ --kubernetes-version：指定kubeadm版本；我这里下载的时候kubeadm最高时1.11.1版本
+ --pod-network-cidr：指定pod所属网络
+ --service-cidr：指定service网段
+ --ignore-preflight-errors=Swap/all：忽略 swap/所有 报错
+注：
+
+　　因为kubeadm需要拉取必要的镜像，这些镜像需要“***”；所以可以先在docker hub或其他镜像仓库拉取kube-proxy、kube-scheduler、kube-apiserver、kube-controller-manager、etcd、pause镜像；并加上 --ignore-preflight-errors=all 忽略所有报错即可。
+
+ 
+
 （3）初始化命令成功后，创建.kube目录
 
-[root@master ~]# mkdir -p $HOME/.kube
-[root@master ~]# cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
 　　
-
+ (4)将init生成的以下命令添加到node节点上
+   kubeadm join 192.168.10.225:6443 --token 8mk3nb.pauj3ipu0je6wtax \
+    --discovery-token-ca-cert-hash sha256:c5ac18010cdc93f3df88e17c82ff8c5d30e15e8393b44f6ba427bd868f9bc6b4 
 
 
 4.2 验证
