@@ -291,47 +291,6 @@ daemonset.extensions/kube-flannel-ds-ppc64le created
 daemonset.extensions/kube-flannel-ds-s390x created
 　　
 
-（2）会看到下载好的flannel 的镜像
-
-[root@master ~]# docker image ls |grep flannel
-quay.io/coreos/flannel                              v0.10.0-amd64       f0fad859c909        12 months ago       44.6 MB
-quay.io/coreos/flannel                              v0.9.1              2b736d06ca4c        14 months ago       51.3 MB
-　　
-
-（3）验证
-
-① master 节点已经Ready
-[root@master ~]# kubectl get nodes
-NAME      STATUS    ROLES     AGE       VERSION
-master    Ready     master    14m       v1.11.1
-② 查询kube-system名称空间下
-
-[root@master ~]# kubectl get pods -n kube-system(指定名称空间) |grep flannel
-NAME                             READY     STATUS    RESTARTS   AGE
-kube-flannel-ds-amd64-4wck2      1/1       Running   0          1m
-　　
-
-5、初始化kubernetes node节点
-在2个node 服务器上执行，完成以下所有操作
-
-5.1 使用kubeadm join 初始化
-（1）初始化node节点；下边的命令是master初始化完成后，下边有提示的操作命令
-[root@node1 ~]# kubeadm join 192.168.10.103:6443 --token t56pjr.cm898tj09xm9pkqz --discovery-token-ca-cert-hash sha256:3ffe1c840e8a4b334fc2cc3d976b0e3635410e52e3653bb39585b8b557f81bc4 --ignore-preflight-errors=Swap
-　　
-
-（2）从节点如果不能“***”，只需从本地上传2个镜像即可；还是我网盘中的镜像
-[root@node1 ~]# docker image load -i kube-proxy-amd64.tar.gz
-[root@node1 ~]# docker image load -i pause.tar.gz
-　　
-
-5.2 验证集群是否初始化成功
-（1）查询2个节点的镜像
-[root@node1 ~]# docker image ls  
-REPOSITORY                    TAG                 IMAGE ID            CREATED             SIZE
-k8s.gcr.io/kube-proxy-amd64   v1.11.1             d5c25579d0ff        6 weeks ago         97.8 MB
-quay.io/coreos/flannel        v0.10.0-amd64       f0fad859c909        7 months ago        44.6 MB
-k8s.gcr.io/pause              3.1                 da86e6ba6ca1        8 months ago        742 kB
-　　
 
 （2）等2个从节点上下载好镜像，初始化完成，再在主上查询验证
 
