@@ -1585,25 +1585,25 @@ Pod 相位的数量和含义是严格指定的。除了本文档中列举的状�
 
 Pod是Kubernetes的基础单元，了解其创建的过程，更有助于理解系统的运作。
 
-①用户通过kubectl或其他API客户端提交Pod Spec给API Server。
+* 用户通过kubectl或其他API客户端提交Pod Spec给API Server。
 
-②API Server尝试将Pod对象的相关信息存储到etcd中，等待写入操作完成，API Server返回确认信息到客户端。
+* API Server尝试将Pod对象的相关信息存储到etcd中，等待写入操作完成，API Server返回确认信息到客户端。
 
-③API Server开始反映etcd中的状态变化。
+* API Server开始反映etcd中的状态变化。
 
-④所有的Kubernetes组件通过"watch"机制跟踪检查API Server上的相关信息变动。
+* 所有的Kubernetes组件通过"watch"机制跟踪检查API Server上的相关信息变动。
 
-⑤kube-scheduler（调度器）通过其"watcher"检测到API Server创建了新的Pod对象但是没有绑定到任何工作节点。
+* kube-scheduler（调度器）通过其"watcher"检测到API Server创建了新的Pod对象但是没有绑定到任何工作节点。
 
-⑥kube-scheduler为Pod对象挑选一个工作节点并将结果信息更新到API Server。
+* kube-scheduler为Pod对象挑选一个工作节点并将结果信息更新到API Server。
 
-⑦调度结果新消息由API Server更新到etcd，并且API Server也开始反馈该Pod对象的调度结果。
+* 调度结果新消息由API Server更新到etcd，并且API Server也开始反馈该Pod对象的调度结果。
 
-⑧Pod被调度到目标工作节点上的kubelet尝试在当前节点上调用docker engine进行启动容器，并将容器的状态结果返回到API Server。
+* Pod被调度到目标工作节点上的kubelet尝试在当前节点上调用docker engine进行启动容器，并将容器的状态结果返回到API Server。
 
-⑨API Server将Pod信息存储到etcd系统中。
+* API Server将Pod信息存储到etcd系统中。
 
-⑩在etcd确认写入操作完成，API Server将确认信息发送到相关的kubelet。
+* 在etcd确认写入操作完成，API Server将确认信息发送到相关的kubelet。
 
 ### **（3）Pod的状态**
 
