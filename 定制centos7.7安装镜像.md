@@ -42,13 +42,11 @@ ks.cfg     #文件是无人值守自动化安装配置文件
 mkdir -p /home/centos7
 
 #复制光盘文件到目录centos7
-rsync -a --exclude=repodata/ /media/cdrom /home/centos7	
+rsync -a  /media/cdrom /home/centos7	
 ```
 
-把准备好的 rpm包拷贝到/home/centos7/Packages/
-
 ## **下载需要的rpm包**
-
+把准备好的rpm包拷贝到/home/centos7/Packages/
 ```ssh
 yum install --downloadonly --downloaddir=/root/package wget
 cp /root/package/* /home/centos7/Packages	
@@ -155,7 +153,7 @@ eof
 
 **Ks.cfg文件参数说明:**
 
-**`install` **（可选的）默认安装方式。必须指定安装类型`cdrom`，`harddrive`，`nfs`，`liveimg`，或`url`（对于FTP，HTTP或HTTPS安装）。`install`命令和安装方法命令必须在单独的行。
+**install**（可选的）默认安装方式。必须指定安装类型`cdrom`，`harddrive`，`nfs`，`liveimg`，或`url`（对于FTP，HTTP或HTTPS安装）。`install`命令和安装方法命令必须在单独的行。
 
 * `cdrom` - 从系统上的第一个光驱安装。
 
@@ -171,7 +169,7 @@ eof
   harddrive --partition=hdb2 --dir=/tmp/install-tree
   ```
 
-**clearpart **（可选的）在创建新分区之前从系统中删除分区。默认情况下，不删除任何分区。
+**clearpart**（可选的）在创建新分区之前从系统中删除分区。默认情况下，不删除任何分区。
 
 * --all  从系统中删除所有分区
 * --drives= 指定要从中清除分区的驱动器。例如，以下内容会清除主 IDE 控制器上前两个驱动器上的所有分区：clearpart --drives=hda,hdb --all
@@ -399,8 +397,8 @@ eof
 - 新增一段，添加一个选项
 
 ```sh
-label linux2
-  menu label ^Install CentOS 7.7 (Kernel-5.5.7-WSA) 
+label linux
+  menu label ^Install CentOS 7.7 (Kernel-5.5.7) 
   menu default
   kernel vmlinuz
   append initrd=initrd.img ks=cdrom:/isolinux/ks.cfg 
@@ -490,9 +488,9 @@ systemctl enable mysqld
 comps.xml文件包含所有与RPM相关的内容。 它检查“软件包”下的RPM软件包依赖性。 安装时如果依赖包丢失，它将提示哪个RPM包需要哪个依赖。
 
 ```sh
-rm -rf *.gz *.bz2 repomd.xml
-cp /media/cdrom/repodata/*-comps.xml /home/centos7/repodata/comps.xml
-#切换到/mnt/iso/路径下生成comps.xml文件
+rm -rf /home/centos7/repodata/*.gz *.bz2 repomd.xml
+# cp /media/cdrom/repodata/*-comps.xml /home/centos7/repodata/comps.xml
+# 切换到/home/centos7/路径下生成comps.xml文件
 cd /home/centos7/ && createrepo -g repodata/*-comps.xml ./
 ```
 
@@ -502,12 +500,12 @@ cd /home/centos7/ && createrepo -g repodata/*-comps.xml ./
 
 ```shell
 cd /home/centos7/ 
-genisoimage -joliet-long -V CentOS7 -o /root/ISO/CentOS-7.7.7.iso -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table -R -J -v -cache-inodes -T -eltorito-alt-boot -e images/efiboot.img -no-emul-boot /home/centos7
+genisoimage -joliet-long -V CentOS7 -o /root/ISO/CentOS-7.7.iso -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table -R -J -v -cache-inodes -T -eltorito-alt-boot -e images/efiboot.img -no-emul-boot /home/centos7
 ```
 
 mkisofs参数说明：
 
-* -o /root/ISO/CentOS-7.7.3.iso，设置输出文件名，-output
+* -o /root/ISO/CentOS-7.7.iso，设置输出文件名，-output
 * -b isolinux/isolinux.bin，指定开机映像文件
 * -c isolinux/boot.cat，制作启动光盘时，mkisofs会将开机映像文件中的全-eltorito-catalog*文件的全部内容作成一个文件
 * -no-emul-boot，非模拟模式启动
@@ -523,8 +521,8 @@ mkisofs参数说明：
 
 其它操作:
 
-* 嵌入md5校验码 （该命令由isomd5sum提供）
+* 嵌入md5校验码 （该命令由isomd5sum提供）   
   `implantisomd5 /tmp/CentOS7-v1.0.iso`
 
-* 检验md5
+* 检验md5    
   `checkisomd5 /tmp/CentOS7-v1.0.iso`
