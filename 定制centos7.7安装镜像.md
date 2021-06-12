@@ -13,10 +13,10 @@ yum -y install anaconda createrepo mkisofs rsync syslinux
 准备完整的CentOS-7安装镜像，挂载到虚拟机，这里使用CentOS-7-x86_64-Minimal-1908.iso作为基础镜像，选择Minimal是因为镜像比较小。
 
 ```sh
-#创建挂载目录
+#创建光盘挂载目录
 mkdir /media/cdrom
 
-#挂载光盘到/mnt/cdrom目录
+#挂载本地光盘到/mnt/cdrom目录
 mount /dev/cdrom /media/cdrom
 
 # 进行入镜像挂载的目录并查看里面文件
@@ -46,7 +46,7 @@ rsync -a  /media/cdrom /home/centos7
 ```
 
 ## **下载需要的rpm包**
-把准备好的rpm包拷贝到/home/centos7/Packages/
+把需要rpm包拷贝到/home/centos7/Packages/目录下,这样操作系统启动会自动加载该目录下的rpm包
 ```ssh
 yum install --downloadonly --downloaddir=/root/package wget
 cp /root/package/* /home/centos7/Packages	
