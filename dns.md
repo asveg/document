@@ -22,7 +22,7 @@ Consider the following `A` record examples for the `example.com` zone file
 
 ```sh
 server1	IN	A	10.0.1.3
-		    IN	A	10.0.1.5
+	IN	A	10.0.1.5
 ```
 
 Requests for `example.com` are pointed to 10.0.1.3 or 10.0.1.5.
@@ -58,7 +58,7 @@ The *`<email-server-name>`* may be a hostname or FQDN.
 
 ```
 IN MX 10 mail.example.com.
-              IN MX 20 mail2.example.com.
+IN MX 20 mail2.example.com.
 ```
 
 In this example, the first `mail.example.com` email server is preferred to the `mail2.example.com` email server when receiving email destined for the `example.com` domain.
@@ -79,7 +79,7 @@ Next, two nameservers are listed as authoritative for the domain. It is not impo
 
 ```
 IN NS dns1.example.com.
-              IN NS dns2.example.com.
+IN NS dns2.example.com.
 ```
 
 * PTR
@@ -99,10 +99,10 @@ The following shows the basic structure of an `SOA` resource record:
 ```sh
 @     IN     SOA    <primary-name-server> <hostmaster-email> (
 	            <serial-number>
-              <time-to-refresh>
-              <time-to-retry>
-              <time-to-expire>
-              <minimum-TTL> )
+                    <time-to-refresh>
+                    <time-to-retry>
+                    <time-to-expire>
+                    <minimum-TTL> )
 ```
 
 The `@` symbol places the `$ORIGIN` directive (or the zone's name, if the `$ORIGIN` directive is not set) as the namespace being defined by this `SOA` resource record. The hostname of the primary nameserver that is authoritative for this domain is the *`<primary-name-server>`* directive, and the email of the person to contact about this namespace is the *`<hostmaster-email>`* directive.
