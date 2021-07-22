@@ -149,7 +149,7 @@ eof
 开机自启
 
 ```sh
-systemctl enable kubelet.service; systemctl start service
+systemctl enable kubelet.service; systemctl start kubelet.service
 ```
 
 配置kubelet使用的cgroup驱动。
