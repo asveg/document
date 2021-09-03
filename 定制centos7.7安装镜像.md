@@ -478,6 +478,12 @@ cat /etc/profile | grep 'JAVA_HOME' || {
 }
 source /etc/profile
 
+###################Centos 7 Config Console############
+grep "GRUB_CMDLINE_LINUX_DEFAULT" /etc/default/grub || {
+  echo "GRUB_CMDLINE_LINUX_DEFAULT="console=tty0 console=ttyS0,9600"" >> /etc/default/grub
+}
+grub2-mkconfig -o /boot/grub2/grub.cfg
+
 # start service
 systemctl enable ntpd
 systemctl enable mysqld
