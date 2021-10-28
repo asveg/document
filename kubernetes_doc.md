@@ -1571,11 +1571,10 @@ Pod 相位的数量和含义是严格指定的。除了本文档中列举的状�
 
 下面是 `phase` 可能的值：
 
-- **挂起（Pending）**：API Server创建了Pod资源对象并已经存入了etcd中，但是它并未被调度完成，或者仍然处于从仓库下载镜像的过程中。
-- **运行中（Running）**：Pod已经被调度到某节点之上，并且所有容器都已经被kubelet创建完成。
-- **成功（Succeeded）**：Pod 中的所有容器都被成功终止，并且不会再重启。
-- **失败（Failed）**：Pod 中的所有容器都已终止了，并且至少有一个容器是因为失败终止。也就是说，容器以非0状态退出或者被系统终止。
-- **未知（Unknown）**：因为某些原因无法取得 Pod 的状态，通常是因为与 Pod 所在主机通信失败。
+- **运行中（Running）：** Pod已经被调度到某节点之上，并且所有容器都已经被kubelet创建完成。
+- **成功（Succeeded）：**：Pod 中的所有容器都被成功终止，并且不会再重启。
+- **失败（Failed）：** Pod 中的所有容器都已终止了，并且至少有一个容器是因为失败终止。也就是说，容器以非0状态退出或者被系统终止。
+- **未知（Unknown）：** 因为某些原因无法取得 Pod 的状态，通常是因为与 Pod 所在主机通信失败。
 
 下图是Pod的生命周期示意图，从图中可以看到Pod状态的变化。
 
@@ -1617,9 +1616,9 @@ Pod 有一个 PodStatus 对象，其中包含一个 [PodCondition](https://kuber
 
 探针是由 kubelet 对容器执行的定期诊断。要执行诊断，kubelet 调用由容器实现的Handler。其存活性探测的方法有以下三种：
 
-- **ExecAction：**在容器内执行指定命令。如果命令退出时返回码为 0 则认为诊断成功。
-- **TCPSocketAction：**对指定端口上的容器的 IP 地址进行 TCP 检查。如果端口打开，则诊断被认为是成功的。
-- **HTTPGetAction：**对指定的端口和路径上的容器的 IP 地址执行 HTTP Get 请求。如果响应的状态码大于等于200 且小于 400，则诊断被认为是成功的。
+- **ExecAction：** 在容器内执行指定命令。如果命令退出时返回码为 0 则认为诊断成功。
+- **TCPSocketAction：** 对指定端口上的容器的 IP 地址进行 TCP 检查。如果端口打开，则诊断被认为是成功的。
+- **HTTPGetAction：** 对指定的端口和路径上的容器的 IP 地址执行 HTTP Get 请求。如果响应的状态码大于等于200 且小于 400，则诊断被认为是成功的。
 
 **设置exec探针举例：**
 
@@ -1640,7 +1639,7 @@ spec:
         command: ["test","-e","/tmp/healthy"]
 ```
 
-上面的资源清单中定义了一个Pod 对象， 基于 busybox 镜像 启动 一个 运行“ touch/ tmp/ healthy； sleep 60； rm- rf/ tmp/ healthy； sleep 600” 命令 的 容器， 此 命令 在 容器 启动 时 创建/ tmp/ healthy 文件， 并于 60 秒 之后 将其 删除。 存活 性 探针 运行“ test -e/ tmp/ healthy” 命令 检查/ tmp/healthy 文件 的 存在 性， 若 文件 存在 则 返回 状态 码 0， 表示 成功 通过 测试。
+上面的资源清单中定义了一个Pod对象， 基于busybox 镜像启动一个运行`touch/ tmp/ healthy; sleep 60; rm- rf/tmp/healthy; sleep 600`命令的容器， 此命令在容器启动时，创建`/ tmp/healthy`文件， 并于60秒之后将其删除。 存活性探针运行`test -e /tmp/healthy` 命令检查`/tmp/healthy`文件的存在性， 若文件存在，则返回状态码0，表示成功通过测试。
 
 **设置HTTP探针举例：**
 
