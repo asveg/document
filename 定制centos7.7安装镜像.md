@@ -42,7 +42,7 @@ ks.cfg     #文件是无人值守自动化安装配置文件
 mkdir -p /home/centos7
 
 #复制光盘文件到目录centos7
-rsync -a  /media/cdrom /home/centos7	
+rsync -a  /media/cdrom/ /home/centos7	
 ```
 
 ## **下载需要的rpm包**
@@ -329,7 +329,7 @@ menu separator # insert an empty line
 label linux
   menu label ^Install CentOS 7.7 (Kernel-5.5.7) 
   kernel vmlinuz
-  append initrd=initrd.img ks=cdrom:/isolinux/ks.cfg  quiet
+  append initrd=initrd.img inst.stage2=hd:LABEL=CentOS7 inst.ks=hd:LABEL=CentOS7:/isolinux/ks.cfg quiet
 
 label check
   menu label Test this ^media & install CentOS 7
@@ -401,7 +401,7 @@ label linux
   menu label ^Install CentOS 7.7 (Kernel-5.5.7) 
   menu default
   kernel vmlinuz
-  append initrd=initrd.img ks=cdrom:/isolinux/ks.cfg 
+  append initrd=initrd.img inst.stage2=hd:LABEL=CentOS7 inst.ks=hd:LABEL=CentOS7:/isolinux/ks.cfg quiet
 ```
 
 其中指定了ks.cfg的路径ks=cdrom:/isolinux/ks.cfg
@@ -495,9 +495,9 @@ comps.xml文件包含所有与RPM相关的内容。 它检查“软件包”下�
 
 ```sh
 rm -rf /home/centos7/repodata/*.gz *.bz2 repomd.xml
-# cp /media/cdrom/repodata/*-comps.xml /home/centos7/repodata/comps.xml
+cp /home/centos7/repodata/*-c7-minimal-x86_64-comps.xml /home/centos7/repodata/comps.xml
 # 切换到/home/centos7/路径下生成comps.xml文件
-cd /home/centos7/ && createrepo -g repodata/*-comps.xml ./
+cd /home/centos7/ && createrepo -g repodata/comps.xml ./
 ```
 
 **注：确认repodata目录是新生成的目录**
