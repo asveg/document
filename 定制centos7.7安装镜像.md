@@ -169,7 +169,7 @@ eof
 
 **Ks.cfg文件参数说明:**
 
-**`install` **（可选的）默认安装方式。必须指定安装类型`cdrom`，`harddrive`，`nfs`，`liveimg`，或`url`（对于FTP，HTTP或HTTPS安装）。`install`命令和安装方法命令必须在单独的行。
+**`install` ** （可选的）默认安装方式。必须指定安装类型`cdrom`，`harddrive`，`nfs`，`liveimg`，或`url`（对于FTP，HTTP或HTTPS安装）。`install`命令和安装方法命令必须在单独的行。
 
 * `cdrom` - 从系统上的第一个光驱安装。
 
@@ -185,7 +185,7 @@ eof
   harddrive --partition=hdb2 --dir=/tmp/install-tree
   ```
 
-**clearpart **（可选的）在创建新分区之前从系统中删除分区。默认情况下，不删除任何分区。
+**clearpart ** （可选的）在创建新分区之前从系统中删除分区。默认情况下，不删除任何分区。
 
 * --all  从系统中删除所有分区
 * --drives= 指定要从中清除分区的驱动器。例如，以下内容会清除主 IDE 控制器上前两个驱动器上的所有分区：clearpart --drives=hda,hdb --all
@@ -420,7 +420,7 @@ label linux2
   menu label ^Install CentOS 7.7
   menu default
   kernel vmlinuz
-  append initrd=initrd.img ks=cdrom:/isolinux/ks.cfg quit
+  append initrd=initrd.img ks=cdrom:/isolinux/ks.cfg quiet
 ```
 
 其中指定了ks.cfg的路径ks=cdrom:/isolinux/ks.cfg
@@ -533,7 +533,7 @@ echo endtime : ${time}
 
 ```csharp
 # dmesg | grep tty
-   [ 0.000000] Command line: BOOT_IMAGE=/vmlinuz-3.10.0-862.11.6.el7.x86_64 root=/dev/mapper/centos-root ro [rd.lvm.lv](http://rd.lvm.lv/)=centos/swap vconsole.font=latarcyrheb-sun16 [rd.lvm.lv](http://rd.lvm.lv/)=centos/root crashkernel=auto vconsole.keymap=us rhgb quiet console=tty0 console=ttyS0, 9600 LANG=en_US.UTF-8
+[ 0.000000] Command line: BOOT_IMAGE=/vmlinuz-3.10.0-862.11.6.el7.x86_64 root=/dev/mapper/centos-root ro [rd.lvm.lv](http://rd.lvm.lv/)=centos/swap vconsole.font=latarcyrheb-sun16 [rd.lvm.lv](http://rd.lvm.lv/)=centos/root crashkernel=auto vconsole.keymap=us rhgb quiet console=tty0 console=ttyS0, 9600 LANG=en_US.UTF-8
  [ 0.000000] Kernel command line: BOOT_IMAGE=/vmlinuz-3.10.0-862.11.6.el7.x86_64 root=/dev/mapper/centos-root ro [rd.lvm.lv](http://rd.lvm.lv/)=centos/swap vconsole.font=latarcyrheb-sun16 [rd.lvm.lv](http://rd.lvm.lv/)=centos/root crashkernel=auto vconsole.keymap=us rhgb quiet console=tty0 console=ttyS0, 9600 LANG=en_US.UTF-8
  [ 0.000000] console [tty0] enabled
  [ 0.000000] console [ttyS0] enabled
