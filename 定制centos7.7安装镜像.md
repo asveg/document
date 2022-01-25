@@ -13,10 +13,10 @@ yum -y install anaconda createrepo mkisofs rsync syslinux
 准备完整的CentOS-7安装镜像，挂载到虚拟机，这里使用CentOS-7-x86_64-Minimal-1908.iso作为基础镜像，选择Minimal是因为镜像比较小。
 
 ```sh
-#创建光盘挂载目录
+#创建挂载目录
 mkdir /media/cdrom
 
-#挂载本地光盘到/mnt/cdrom目录
+#挂载光盘到/mnt/cdrom目录
 mount /dev/cdrom /media/cdrom
 
 # 进行入镜像挂载的目录并查看里面文件
@@ -42,11 +42,13 @@ ks.cfg     #文件是无人值守自动化安装配置文件
 mkdir -p /home/centos7
 
 #复制光盘文件到目录centos7
-rsync -a  /media/cdrom/ /home/centos7	
+rsync -a /media/cdrom/ /home/centos7
 ```
 
+把准备好的 rpm包拷贝到/home/centos7/Packages/
+
 ## **下载需要的rpm包**
-把需要rpm包拷贝到/home/centos7/Packages/目录下,这样操作系统启动会自动加载该目录下的rpm包
+
 ```ssh
 yum install --downloadonly --downloaddir=/root/package wget
 cp /root/package/* /home/centos7/Packages	
@@ -84,7 +86,7 @@ network  --bootproto=static --device=ens192 --gateway=192.168.10.1 --ip=192.168.
 # network  --bootproto=dhcp --device=enp6s0 --onboot=off --ipv6=auto
 network  --hostname=localhost.localdomain
 # Root password default is  root
-rootpw --iscrypted $6$CSoABsIMzDwI9ECr$5MpYyJuYbl460JpA4wr6LfvEvAm.BFOjxWpjz0zyf.C.CH7Z2fPLyl79hDLe7Lleqwp8O9dJYtQ4.NPOle3nJ1
+rootpw --iscrypted $6$E2fcxylfJk7sbi/u$cdwTrjqvmavdS1DjoffBVyh/xgA8WfTTAixOo4i8fjHJwKoa0JkyAfv0ItpebLk0L6oTPEbjtTFgbTvfdDdxM/
 # stop firewall
 firewall --disabled
 # System services
@@ -120,21 +122,23 @@ reboot
 @^minimal
 @core
 kexec-tools
-mysql
-mysql-community-server
-tcpdump
-jdk
-ntp
+qemu-kvm
+libvirt
+virt-manager
+libguestfs-tools
 net-tools
-perl
-unzip
-zip
+virt-install
+ntp
+ntpdate
+xauth
+xclock
 %end
 
 %addon com_redhat_kdump --enable --reserve-mb='auto'
 
 %end
 
+# 如果是虚拟机的镜像，采用如下操作：
 %post --nochroot --log=/mnt/sysimage/var/log/kickstart_post_nochroot.log
 # create usb mount director
 mkdir -p /mnt/source
@@ -144,16 +148,28 @@ mount /dev/cdrom  /mnt/source
 cp -rf /mnt/source/sources /mnt/sysimage/usr/local
 %end
 
-%post
-cd /usr/local/sources
-bash /usr/local/sources/install.sh
+# 如果是usb的镜像，采用如下操作：
+%post --nochroot --log=/mnt/sysimage/var/log/kickstart_post_nochroot.log
+# create usb mount director
+mkdir -p /mnt/source
+# Mount usb to /mnt/sysimage/usbdisk
+DISK=$(fdisk -l | grep "/dev/sdb[[:digit:]]" | awk '{print $1}')
+mount ${DISK} /mnt/source
+# /mnt/sysimage/usbdisk/sources data transfer to /mnt/sysimage/usr/local
+cp -rf /mnt/source/sources /mnt/sysimage/usr/local
 %end
+
+%post
+echo "start install wsa" > /usr/local/kvm.log
+/bin/bash /usr/local/sources/install.sh > /usr/local/kvm.log
+%end
+
 eof
 ```
 
 **Ks.cfg文件参数说明:**
 
-**install**（可选的）默认安装方式。必须指定安装类型`cdrom`，`harddrive`，`nfs`，`liveimg`，或`url`（对于FTP，HTTP或HTTPS安装）。`install`命令和安装方法命令必须在单独的行。
+**`install` **（可选的）默认安装方式。必须指定安装类型`cdrom`，`harddrive`，`nfs`，`liveimg`，或`url`（对于FTP，HTTP或HTTPS安装）。`install`命令和安装方法命令必须在单独的行。
 
 * `cdrom` - 从系统上的第一个光驱安装。
 
@@ -169,7 +185,7 @@ eof
   harddrive --partition=hdb2 --dir=/tmp/install-tree
   ```
 
-**clearpart**（可选的）在创建新分区之前从系统中删除分区。默认情况下，不删除任何分区。
+**clearpart **（可选的）在创建新分区之前从系统中删除分区。默认情况下，不删除任何分区。
 
 * --all  从系统中删除所有分区
 * --drives= 指定要从中清除分区的驱动器。例如，以下内容会清除主 IDE 控制器上前两个驱动器上的所有分区：clearpart --drives=hda,hdb --all
@@ -327,9 +343,12 @@ menu separator # insert an empty line
 menu separator # insert an empty line
 
 label linux
-  menu label ^Install CentOS 7.7 (Kernel-5.5.7) 
+  menu label ^Install CentOS 7.7
   kernel vmlinuz
-  append initrd=initrd.img inst.stage2=hd:LABEL=CentOS7 inst.ks=hd:LABEL=CentOS7:/isolinux/ks.cfg quiet
+  #如果是制作虚拟机的镜像，使用下面的命令
+  append initrd=initrd.img ks=cdrom:/isolinux/ks.cfg  quiet
+  #如果是制作usb的镜像，使用下面的命令
+  #append initrd=initrd.img inst.stage2=hd:LABEL=CentOS7 inst.ks=hd:LABEL=CentOS7:/isolinux/ks.cfg
 
 label check
   menu label Test this ^media & install CentOS 7
@@ -397,11 +416,11 @@ eof
 - 新增一段，添加一个选项
 
 ```sh
-label linux
-  menu label ^Install CentOS 7.7 (Kernel-5.5.7) 
+label linux2
+  menu label ^Install CentOS 7.7
   menu default
   kernel vmlinuz
-  append initrd=initrd.img inst.stage2=hd:LABEL=CentOS7 inst.ks=hd:LABEL=CentOS7:/isolinux/ks.cfg quiet
+  append initrd=initrd.img ks=cdrom:/isolinux/ks.cfg quit
 ```
 
 其中指定了ks.cfg的路径ks=cdrom:/isolinux/ks.cfg
@@ -415,23 +434,9 @@ https://github.com/joyent/mi-centos-7/blob/master/ks.cfg
 - ks.cfg中%post和%end段内定制安装完成系统后执行的命令
 
 ```sh
-# the first one example
-%post --nochroot --log=/mnt/sysimage/var/log/kickstart_post_nochroot.log
-echo "Copying %pre stage log files"
-/usr/bin/cp -rv /tmp/kickstart_pre.log /mnt/sysimage/var/log/
-echo "=============================="
-echo "Currently mounted partitions"
-df -Th
-%end
-
-# the first two example
-# --interpreter /usr/bin/python 允许您指定不同的脚本语言，例如 Python。将/usr/bin/python替换为您选择的脚本语言。
-%post --interpreter=shell --log=/var/log/kickstart_post.log
-echo "Executing post installation scripts"
-/tmp/post_scripts.sh
-
-echo "Installation Completed"
-date
+%post
+echo "start install msa" > /usr/local/kvm.log
+/bin/bash /usr/local/sources/install.sh > /usr/local/kvm.log
 %end
 ```
 
@@ -439,27 +444,36 @@ date
 
 ```sh
 #!/bin/bash
-echo "###########################################################"
-echo "++++++++++++++Setup System++Deplay App ++++++++++++++++++"
-echo "###########################################################"
-  
-# get ip address
-interface=$(ls /sys/class/net| grep -v "lo" | head -1)
-ipaddr=$(ip route show | grep -v default | awk '{print $9}')
-echo "$interface = $ipaddr"  
 
-#configure ssh
-ssh=$(cat /etc/ssh/sshd_config | grep "^UseDNS no")
-echo $ssh
+echo "###########################################################"
+echo "++++++++++++++Setup System++Deplay MSA ++++++++++++++++++++"
+echo "###########################################################" 
+
+time=$(date "+%Y-%m-%d %H:%M:%S")
+echo starttime : ${time}
+
+#define variable
+FilePath=/usr/local/sources
+IMG="ECV-8.3.3.5_86013.qcow2"
+
+cd ${FilePath}
+
+echo "Configure sshd service"
+cat /etc/ssh/sshd_config | grep "^UseDNS no"
 if [ $? -eq 0 ]; then
-	echo "the parameters already exists"
+        echo "the parameters already exists"
 else
-	sed -i '/#VersionAddendum none/a\UseDNS no' /etc/ssh/sshd_config
+        sed -i '/#VersionAddendum none/a\UseDNS no' /etc/ssh/sshd_config
 fi
 sed -i "s/GSSAPIAuthentication yes/GSSAPIAuthentication no/g" /etc/ssh/sshd_config
-systemctl restart sshd
 
-#modify system resource limits
+echo "Set laugue"
+cat /etc/profile | grep 'LC_ALL' || {
+  echo 'export LC_ALL="en_US.UTF-8"' >> /etc/profile 
+}
+source /etc/profile 
+
+echo "modify system resource limits"
 cat /etc/security/limits.conf | grep '40960' || {
   echo '* soft noproc 40960' >> /etc/security/limits.conf
   echo '* hard noproc 40960' >> /etc/security/limits.conf
@@ -467,26 +481,106 @@ cat /etc/security/limits.conf | grep '40960' || {
   echo '* hard nofile 40960' >> /etc/security/limits.conf
 }
 source /etc/security/limits.conf
-# install jdk tools
-cat /etc/profile | grep 'JAVA_HOME' || {
-  echo '#####jdk parameter########' >>  /etc/profile
-  echo "JAVA_HOME=/usr/java/jdk1.8.0_271-amd64" >> /etc/profile
-  echo "CLASSPATH=%JAVA_HOME%/lib:%JAVA_HOME%/jre/lib" >> /etc/profile
-  echo "PATH=$PATH:$JAVA_HOME/bin:$JAVA_HOME/jre/bin" >> /etc/profile
-  echo "export PATH CLASSPATH JAVA_HOME" >> /etc/profile
-  echo "#export LANG=zh_CN.UTF-8" >> /etc/profile
-}
-source /etc/profile
 
-###################Centos 7 Config Console############
+echo "Copy file to system"
+mkdir -p /var/lib/libvirt/images/
+cp ${FilePath}/bin/getsn /usr/sbin
+cp ${FilePath}/img/${IMG} /var/lib/libvirt/images/
+
+echo "Configure Console" 
 grep "GRUB_CMDLINE_LINUX_DEFAULT" /etc/default/grub || {
-  echo "GRUB_CMDLINE_LINUX_DEFAULT="console=tty0 console=ttyS0,9600"" >> /etc/default/grub
+  echo 'GRUB_CMDLINE_LINUX_DEFAULT="console=tty0 console=ttyS3,9600"' >> /etc/default/grub
 }
 grub2-mkconfig -o /boot/grub2/grub.cfg
 
-# start service
-systemctl enable ntpd
-systemctl enable mysqld
+echo "Set the KVM to start automatically" 
+systemctl start libvirtd
+systemctl enable libvirtd
+systemctl is-enabled libvirtd
+lsmod |grep kvm
+
+cp ${FilePath}/msa/sliver-peak.xml /root
+
+echo "Generate mac address" 
+for((i=1;i<=3;i++));
+do 
+        Mac=$(echo $RANDOM|md5sum|sed 's/../:&/g'|cut -c 1-15)
+        Quotes="'"
+        Str="00"
+        StrMac=${Quotes}${Str}${Mac}${Quotes}
+        StrMacs=$(echo StrMac${i})
+        # modify configure file
+        sed -i "s/${StrMacs}/${StrMac}/g" /root/sliver-peak.xml
+done
+
+echo "Deploy a VM and enable automatic startup for the VM"
+chmod +x /etc/rc.d/rc.local
+cp ${FilePath}/sliver-peak.sh  /etc/rc.d/init.d/
+echo 'nohup  /usr/bin/sh /etc/rc.d/init.d/sliver-peak.sh  >> /var/log/sliver-peak.log &' >> /etc/rc.d/rc.local
+cd /etc/rc.d/init.d/
+chmod +x  sliver-peak.sh
+chkconfig --add sliver-peak.sh
+chkconfig sliver-peak.sh on
+chkconfig --list | grep  "sliver-peak.sh"
+
+# last time 
+echo endtime : ${time}
+```
+
+**Tips：**
+
+查看是否支持串口，出现以上console enabled表示支持
+
+```csharp
+# dmesg | grep tty
+   [ 0.000000] Command line: BOOT_IMAGE=/vmlinuz-3.10.0-862.11.6.el7.x86_64 root=/dev/mapper/centos-root ro [rd.lvm.lv](http://rd.lvm.lv/)=centos/swap vconsole.font=latarcyrheb-sun16 [rd.lvm.lv](http://rd.lvm.lv/)=centos/root crashkernel=auto vconsole.keymap=us rhgb quiet console=tty0 console=ttyS0, 9600 LANG=en_US.UTF-8
+ [ 0.000000] Kernel command line: BOOT_IMAGE=/vmlinuz-3.10.0-862.11.6.el7.x86_64 root=/dev/mapper/centos-root ro [rd.lvm.lv](http://rd.lvm.lv/)=centos/swap vconsole.font=latarcyrheb-sun16 [rd.lvm.lv](http://rd.lvm.lv/)=centos/root crashkernel=auto vconsole.keymap=us rhgb quiet console=tty0 console=ttyS0, 9600 LANG=en_US.UTF-8
+ [ 0.000000] console [tty0] enabled
+ [ 0.000000] console [ttyS0] enabled
+ [ 0.961352] 00:03: ttyS0 at I/O 0x3f8 (irq = 4) is a 16550A
+ [ 0.981919] 00:04: ttyS1 at I/O 0x2f8 (irq = 3) is a 16550A
+```
+
+
+
+接下来编写sliver-peak.sh 脚本
+
+这个是一个开机自启动服务脚本，没有这个脚本服务是不能正常启动的，为了实现自动化必须这样做。
+
+```sh
+#!/bin/bash
+#chkconfig: 2345 10 90
+#description: start sliver-pea
+
+# 这个延时参数很关键，如果没有这个参数，服务是无法自动启动的，导致配置文件移除无法正常加载。
+sleep 15
+
+RemoveFiles() {
+    echo "remove /usr/local/sources files"
+    rm -rf /usr/local/sources
+    cd /etc/rc.d/init.d/
+    chkconfig --del sliver-peak.sh
+    chkconfig sliver-peak.sh off
+    rm -rf sliver-peak.sh
+    mv /root/sliver-peak.xml /tmp/
+}
+
+RUN=$(virsh list |grep "running" | awk '{print $3}')
+if [[ ${RUN} == "running" ]]; then
+    echo "sliver-peak is running"
+    RemoveFiles
+else
+    echo "Deploy a VM and enable automatic startup for the VM"
+    virsh define /root/sliver-peak.xml
+    virsh start sliver-peak
+    virsh autostart sliver-peak
+    RUN=$(virsh list |grep "running" | awk '{print $3}')
+    echo ${RUN}
+    if [[ ${RUN} == "running" ]]; then
+      echo "sliver-peak is running"
+      RemoveFiles
+    fi
+fi
 ```
 
 ## 更新comp.xml文件
@@ -494,10 +588,10 @@ systemctl enable mysqld
 comps.xml文件包含所有与RPM相关的内容。 它检查“软件包”下的RPM软件包依赖性。 安装时如果依赖包丢失，它将提示哪个RPM包需要哪个依赖。
 
 ```sh
-rm -rf /home/centos7/repodata/*.gz *.bz2 repomd.xml
-cp /home/centos7/repodata/*-c7-minimal-x86_64-comps.xml /home/centos7/repodata/comps.xml
-# 切换到/home/centos7/路径下生成comps.xml文件
-cd /home/centos7/ && createrepo -g repodata/comps.xml ./
+rm -rf *.gz *.bz2 repomd.xml
+cp /media/cdrom/repodata/*-comps.xml /home/centos7/repodata/comps.xml
+#切换到/mnt/iso/路径下生成comps.xml文件
+cd /home/centos7/ && createrepo -g repodata/*-comps.xml ./
 ```
 
 **注：确认repodata目录是新生成的目录**
@@ -506,12 +600,12 @@ cd /home/centos7/ && createrepo -g repodata/comps.xml ./
 
 ```shell
 cd /home/centos7/ 
-genisoimage -joliet-long -V CentOS7 -o /root/ISO/CentOS-7.7.iso -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table -R -J -v -cache-inodes -T -eltorito-alt-boot -e images/efiboot.img -no-emul-boot /home/centos7
+genisoimage -joliet-long -V CentOS7 -o /root/ISO/CentOS-7.7.7.iso -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table -R -J -v -cache-inodes -T -eltorito-alt-boot -e images/efiboot.img -no-emul-boot /home/centos7
 ```
 
 mkisofs参数说明：
 
-* -o /root/ISO/CentOS-7.7.iso，设置输出文件名，-output
+* -o /root/ISO/CentOS-7.7.3.iso，设置输出文件名，-output
 * -b isolinux/isolinux.bin，指定开机映像文件
 * -c isolinux/boot.cat，制作启动光盘时，mkisofs会将开机映像文件中的全-eltorito-catalog*文件的全部内容作成一个文件
 * -no-emul-boot，非模拟模式启动
@@ -527,8 +621,8 @@ mkisofs参数说明：
 
 其它操作:
 
-* 嵌入md5校验码 （该命令由isomd5sum提供）   
+* 嵌入md5校验码 （该命令由isomd5sum提供）
   `implantisomd5 /tmp/CentOS7-v1.0.iso`
 
-* 检验md5    
+* 检验md5
   `checkisomd5 /tmp/CentOS7-v1.0.iso`
